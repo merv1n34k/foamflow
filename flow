@@ -1,0 +1,160 @@
+#!/bin/bash
+# OpenFOAM case automation script: "flow"
+# Usage: flow [new|pre|run|post] CASE_NAME
+# If no stage is specified (only CASE_NAME), the script runs all stages in order.
+
+# Exit on errors or unset variables:
+set -euo pipefail
+
+# Function to show usage
+usage() {
+    echo "Usage: $(basename $0) [new|pre|run|post] CASE_NAME"
+    exit 1
+}
+
+# Parse arguments
+if [ $# -eq 1 ]; then
+    # Only case name provided -> run all stages
+    subcmd="all"
+    caseName="$1"
+elif [ $# -eq 2 ]; then
+    subcmd="$1"
+    caseName="$2"
+else
+    usage
+fi
+
+# Load configuration from Flowfile
+CONFIG_FILE="Flowfile"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Configuration file '$CONFIG_FILE' not found."
+    exit 1
+fi
+# Export variables from Flowfile, ignoring comments and blank lines
+eval "$(
+    sed -e 's/[[:space:]]*#.*//' -e '/^$/d' "$CONFIG_FILE" \
+    | sed -e 's/^\([^=]\+\)=\([^\"].*\)$/export \1="\2"/' 
+)"
+
+# Define subcommand functions
+do_new() {
+    if [ -d "$caseName" ]; then
+        echo "Error: Case '$caseName' already exists."
+        exit 1
+    fi
+    if [ ! -f "case.template" ]; then
+        echo "Error: case.template not found."
+        exit 1
+    fi
+    echo "Creating new case '$caseName' from template..."
+    # Source the case template script which defines create_case function
+    . case.template
+    create_case "$caseName"
+    echo "Case structure for '$caseName' created."
+}
+
+do_pre() {
+    if [ ! -d "$caseName" ]; then
+        echo "Error: Case '$caseName' does not exist. Run 'flow new $caseName' first."
+        exit 1
+    fi
+    echo "Pre-processing case '$caseName'..."
+    # Substitute all placeholders (!!VAR!! tokens) with actual values from Flowfile
+    for var in LENGTH WIDTH HEIGHT NX NY NZ \
+               PHASE1_NAME PHASE2_NAME PHASE3_NAME \
+               PHASE1_RHO PHASE2_RHO PHASE3_RHO \
+               PHASE1_NU PHASE2_NU PHASE3_NU \
+               PHASE1_MU PHASE2_MU PHASE3_MU \
+               PHASE1_INIT PHASE2_INIT PHASE3_INIT \
+               G_X G_Y G_Z \
+               START_TIME END_TIME DELTA_T WRITE_INTERVAL SOLVER; do
+        val="${!var-}"  # get value of variable (if set)
+        [ -z "$val" ] && continue
+        # Escape any special characters in the value for sed (especially & and /)
+        safeVal=$(printf '%s' "$val" | sed -e 's/[&/]/\\&/g')
+        find "$caseName" -type f -exec sed -i "s/!!${var}!!/${safeVal}/g" {} +
+    done
+    # Rename files that have placeholders in their names (e.g., phase-specific files)
+    mv -f "$caseName/0/alpha.!!PHASE1_NAME!!" "$caseName/0/alpha.${PHASE1_NAME}" 2>/dev/null || true
+    mv -f "$caseName/0/alpha.!!PHASE2_NAME!!" "$caseName/0/alpha.${PHASE2_NAME}" 2>/dev/null || true
+    mv -f "$caseName/0/alpha.!!PHASE3_NAME!!" "$caseName/0/alpha.${PHASE3_NAME}" 2>/dev/null || true
+    mv -f "$caseName/0/U.!!PHASE1_NAME!!" "$caseName/0/U.${PHASE1_NAME}" 2>/dev/null || true
+    mv -f "$caseName/0/U.!!PHASE2_NAME!!" "$caseName/0/U.${PHASE2_NAME}" 2>/dev/null || true
+    mv -f "$caseName/0/U.!!PHASE3_NAME!!" "$caseName/0/U.${PHASE3_NAME}" 2>/dev/null || true
+    mv -f "$caseName/constant/thermophysicalProperties.!!PHASE1_NAME!!" \
+          "$caseName/constant/thermophysicalProperties.${PHASE1_NAME}" 2>/dev/null || true
+    mv -f "$caseName/constant/thermophysicalProperties.!!PHASE2_NAME!!" \
+          "$caseName/constant/thermophysicalProperties.${PHASE2_NAME}" 2>/dev/null || true
+    mv -f "$caseName/constant/thermophysicalProperties.!!PHASE3_NAME!!" \
+          "$caseName/constant/thermophysicalProperties.${PHASE3_NAME}" 2>/dev/null || true
+    mv -f "$caseName/constant/turbulenceProperties.!!PHASE1_NAME!!" \
+          "$caseName/constant/turbulenceProperties.${PHASE1_NAME}" 2>/dev/null || true
+    mv -f "$caseName/constant/turbulenceProperties.!!PHASE2_NAME!!" \
+          "$caseName/constant/turbulenceProperties.${PHASE2_NAME}" 2>/dev/null || true
+    mv -f "$caseName/constant/turbulenceProperties.!!PHASE3_NAME!!" \
+          "$caseName/constant/turbulenceProperties.${PHASE3_NAME}" 2>/dev/null || true
+
+    # Run mesh generation (blockMesh) and other preprocessing as needed
+    echo "Generating mesh (blockMesh)..."
+    pushd "$caseName" >/dev/null
+    blockMesh
+    popd >/dev/null
+    echo "Pre-processing for '$caseName' completed."
+}
+
+do_run() {
+    if [ ! -d "$caseName" ]; then
+        echo "Error: Case '$caseName' does not exist."
+        exit 1
+    fi
+    echo "Running simulation for case '$caseName'..."
+    if [ -x "$caseName/Allrun" ]; then
+        pushd "$caseName" >/dev/null
+        ./Allrun   # use Allrun script if available
+        popd >/dev/null
+    else
+        pushd "$caseName" >/dev/null
+        $SOLVER    # run solver directly if no Allrun
+        popd >/dev/null
+    fi
+    echo "Simulation run for '$caseName' completed."
+}
+
+do_post() {
+    if [ ! -d "$caseName" ]; then
+        echo "Error: Case '$caseName' does not exist."
+        exit 1
+    fi
+    echo "Post-processing results for case '$caseName'..."
+    resultFile="${caseName}_result.csv"
+    # Prepare CSV header
+    echo "Phase,AverageVolumeFraction" > "$resultFile"
+    # Determine last time directory output
+    lastDir=$(find "$caseName" -maxdepth 1 -type d -regextype posix-extended -regex ".*/[0-9]+(\.[0-9]+)?" | sort -V | tail -1)
+    [ -z "$lastDir" ] && lastDir="$caseName/0"  # if no time directory, use initial conditions
+    # Compute average volume fraction for each phase (assuming uniform internal field if present)
+    for phase in "${PHASE1_NAME}" "${PHASE2_NAME}" "${PHASE3_NAME}"; do
+        fieldFile="$lastDir/alpha.$phase"
+        if [ -f "$fieldFile" ]; then
+            avg="N/A"
+            # If internalField is uniform, parse that value; otherwise mark as N/A or handle as needed
+            if grep -q "internalField[[:space:]]\+uniform" "$fieldFile"; then
+                avg=$(grep "internalField" "$fieldFile" | awk '{print $3}' | tr -d ';')
+            fi
+            echo "$phase,$avg" >> "$resultFile"
+        fi
+    done
+    echo "Results saved to $resultFile"
+}
+
+# Execute the requested stage(s)
+case "$subcmd" in
+    new)   do_new ;;
+    pre)   do_pre ;;
+    run)   do_run ;;
+    post)  do_post ;;
+    all) 
+        do_new && do_pre && do_run && do_post 
+        ;;
+    *) usage ;;
+esac
