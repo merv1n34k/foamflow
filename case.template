@@ -1,20 +1,30 @@
-# case.template - Template for OpenFOAM case directory (3-phase Eulerian simulation)
-# Defines function create_case(caseDir) to generate a new case structure and files.
+
+#!/usr/bin/env bash
+# case.template - create a complete OpenFOAM case (gas-liquid-solid, Euler-Euler)
+# Defines: create_case <caseDir>
+# Leaves values as %%PLACEHOLDER%% to be substituted by `flow pre` from Flowfile
 
 create_case() {
-    local caseDir="$1"
-    # Create directory structure
-    mkdir -p "$caseDir/0" "$caseDir/constant" "$caseDir/system"
-    
-    ##### system/controlDict #####
-    cat > "$caseDir/system/controlDict" <<'EOF'
+  local caseDir="$1"
+
+  # OpenFOAM dictionary header (v2506) to prepend to relevant files
+  read -r -d '' HEADER <<'HED'
 /*--------------------------------*- C++ -*----------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2012                                 |
-|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
+HED
+
+  # Directory structure
+  mkdir -p "$caseDir/0" "$caseDir/constant" "$caseDir/system"
+
+  # system/controlDict
+  cat > "$caseDir/system/controlDict" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
@@ -23,33 +33,35 @@ FoamFile
     location    "system";
     object      controlDict;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     !!SOLVER!!;
+application     %%SOLVER%%;
 
 startFrom       startTime;
-startTime       !!START_TIME!!;
+startTime       %%START_TIME%%;
 stopAt          endTime;
-endTime         !!END_TIME!!;
-deltaT          !!DELTA_T!!;
+endTime         %%END_TIME%%;
+deltaT          %%DELTA_T%%;
 
 writeControl    runTime;
-writeInterval   !!WRITE_INTERVAL!!;
+writeInterval   %%WRITE_INTERVAL%%;
 purgeWrite      0;
-printExecutionTime  yes;
+writeFormat     ascii;
+writePrecision  7;
+writeCompression off;
+
+timePrecision   6;
+runTimeModifiable yes;
+adjustTimeStep  no;
+maxCo           0.5;
+maxAlphaCo      0.5;
 
 // ************************************************************************* //
 EOF
 
-    ##### system/fvSchemes #####
-    cat > "$caseDir/system/fvSchemes" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2012                                 |
-|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
-|    \\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+  # system/fvSchemes
+  cat > "$caseDir/system/fvSchemes" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
@@ -58,55 +70,74 @@ FoamFile
     location    "system";
     object      fvSchemes;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 ddtSchemes
 {
     default         Euler;
 }
+
 gradSchemes
 {
     default         Gauss linear;
 }
+
 divSchemes
 {
     default         none;
-    div(phi,alpha.*) Gauss vanLeer;
-    div(phirb,alpha.*) Gauss interfaceCompression;
-    div(phi,U.*)    Gauss limitedLinearV 1;
-    div(phi,k)      Gauss upwind;
-    div(phi,epsilon) Gauss upwind;
+
+    "div\(phi,alpha.*\)"    Gauss vanLeer;
+    "div\(phir,alpha.*,alpha.*\)"   Gauss vanLeer;
+
+    "div\(alphaPhi.*,U.*\)" Gauss limitedLinearV 1;
+    div(Rc)                 Gauss linear;
+    "div\(phi.*,U.*\)"      Gauss limitedLinearV 1;
+
+    div(phi,k)              Gauss upwind;
+    div(phi,omega)          Gauss upwind;
+
+    div(((muEff)*dev2(T(grad(U.liquid))))) Gauss linear;
 }
+
 laplacianSchemes
 {
     default         Gauss linear orthogonal;
 }
+
 interpolationSchemes
 {
     default         linear;
 }
+
 snGradSchemes
 {
     default         orthogonal;
 }
+
 fluxRequired
 {
     default         yes;
     p;
+    p_rgh;
+}
+
+wallDist
+{
+method meshWave;
 }
 
 // ************************************************************************* //
 EOF
 
-    ##### system/fvSolution #####
-    cat > "$caseDir/system/fvSolution" <<'EOF'
+  # system/fvSolution
+  cat > "$caseDir/system/fvSolution" <<'EOF'
 /*--------------------------------*- C++ -*----------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2012                                 |
-|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
+
 FoamFile
 {
     version     2.0;
@@ -115,24 +146,43 @@ FoamFile
     location    "system";
     object      fvSolution;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 solvers
 {
     "alpha.*"
     {
+        nAlphaCorr      2;
+        nAlphaSubCycles 1;
+        cAlpha          1;
+
         solver          smoothSolver;
         smoother        symGaussSeidel;
         tolerance       1e-08;
         relTol          0;
     }
-    "p"
+
+    p_rgh
     {
         solver          PCG;
         preconditioner  DIC;
         tolerance       1e-06;
         relTol          0.01;
     }
+
+    p_rghFinal
+    {
+        $p_rgh;
+        relTol          0;
+    }
+
+    "pcorr.*"
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-5;
+        relTol          0;
+    }
+
     "U.*"
     {
         solver          smoothSolver;
@@ -140,51 +190,76 @@ solvers
         tolerance       1e-06;
         relTol          0;
     }
-    "k"
+
+    k
     {
         solver          smoothSolver;
         smoother        symGaussSeidel;
         tolerance       1e-06;
         relTol          0;
     }
-    "epsilon"
+
+    kFinal
+    {
+        $k
+        relTol          0;
+    }
+
+    omega
     {
         solver          smoothSolver;
         smoother        symGaussSeidel;
         tolerance       1e-06;
+        relTol          0;
+    }
+
+    omegaFinal
+    {
+        $omega
         relTol          0;
     }
 }
+
 PIMPLE
 {
-    nOuterCorrectors 1;
-    nCorrectors      2;
-    nNonOrthogonalCorrectors 0;
+    nOuterCorrectors            1;
+    nCorrectors                 2;
+    nNonOrthogonalCorrectors    0;
+
+    residualControl
+    {
+        U.gas     { tolerance 1e-5; relTol 0;    }
+        U.liquid  { tolerance 1e-5; relTol 0;    }
+        U.solid   { tolerance 1e-5; relTol 0;    }
+
+        p_rgh     { tolerance 1e-5; relTol 0.01; }
+
+        "alpha.*" { tolerance 1e-8; relTol 0;    }
+
+        k         { tolerance 1e-5; relTol 0;    }
+        omega     { tolerance 1e-5; relTol 0;    }
+    }
 }
+
 relaxationFactors
 {
     fields
     {
-        p               0.3;
+        p_rgh   0.3;
     }
     equations
     {
-        ".*"            1.0;
+        ".*"    1.0;
     }
 }
 
 // ************************************************************************* //
 EOF
 
-    ##### system/blockMeshDict #####
-    cat > "$caseDir/system/blockMeshDict" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2012                                 |
-|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
-|    \\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+  # system/blockMeshDict
+  cat > "$caseDir/system/blockMeshDict" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
@@ -193,25 +268,24 @@ FoamFile
     location    "system";
     object      blockMeshDict;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-convertToMeters 1.0;
+scale 1.0;
 
 vertices
 (
-    (0 0 0)
-    (!!LENGTH!! 0 0)
-    (!!LENGTH!! !!WIDTH!! 0)
-    (0 !!WIDTH!! 0)
-    (0 0 !!HEIGHT!!)
-    (!!LENGTH!! 0 !!HEIGHT!!)
-    (!!LENGTH!! !!WIDTH!! !!HEIGHT!!)
-    (0 !!WIDTH!! !!HEIGHT!!)
+    (0          0           0)
+    (%%LENGTH%% 0           0)
+    (%%LENGTH%% %%WIDTH%%   0)
+    (0          %%WIDTH%%   0)
+    (0          0           %%HEIGHT%%)
+    (%%LENGTH%% 0           %%HEIGHT%%)
+    (%%LENGTH%% %%WIDTH%%   %%HEIGHT%%)
+    (0          %%WIDTH%%   %%HEIGHT%%)
 );
 
 blocks
 (
-    hex (0 1 2 3 4 5 6 7) (!!NX!! !!NY!! !!NZ!!) simpleGrading (1 1 1)
+    hex (0 1 2 3 4 5 6 7) (%%NX%% %%NY%% %%NZ%%) simpleGrading (1 1 1)
 );
 
 edges
@@ -222,18 +296,18 @@ patches
 (
     patch inlet
     (
-        (0 4 7 3)
+        (0 4 7 3)          // bottom face
     )
     patch outlet
     (
-        (1 2 6 5)
+        (1 2 6 5)          // top face
     )
     wall walls
     (
-        (0 1 5 4)
-        (3 7 6 2)
-        (0 3 2 1)
-        (4 5 6 7)
+        (0 1 5 4)          // side 1
+        (3 7 6 2)          // side 2
+        (0 3 2 1)          // narrow face 1
+        (4 5 6 7)          // narrow face 2
     )
 );
 
@@ -244,15 +318,10 @@ mergePatchPairs
 // ************************************************************************* //
 EOF
 
-    ##### constant/g #####
-    cat > "$caseDir/constant/g" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  G ravity       | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2012                                 |
-|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
-|    \\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+  # constant/g
+  cat > "$caseDir/constant/g" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
@@ -261,23 +330,17 @@ FoamFile
     location    "constant";
     object      g;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-dimensions       [0 1 -2 0 0 0 0];
-value            ( !!G_X!! !!G_Y!! !!G_Z!! );
+dimensions      [0 1 -2 0 0 0 0];
+value           ( %%G_X%% %%G_Y%% %%G_Z%% );
 
 // ************************************************************************* //
 EOF
 
-    ##### constant/phaseProperties #####
-    cat > "$caseDir/constant/phaseProperties" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  M ultiphase    | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   P roperties    | Version:  v2012                                 |
-|   \\  /    F ile          | Web:      www.OpenFOAM.com                      |
-|    \\/     Format         |                                                 |
-\*---------------------------------------------------------------------------*/
+  # constant/phaseProperties
+  cat > "$caseDir/constant/phaseProperties" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
@@ -286,67 +349,66 @@ FoamFile
     location    "constant";
     object      phaseProperties;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-phases          ( !!PHASE1_NAME!! !!PHASE2_NAME!! !!PHASE3_NAME!! );
-
-!!PHASE1_NAME!!
-{
-    // Phase 1 (e.g., gas) properties
-    diameterModel   constant;
-    constantCoeffs
+phases
+(
+    gas
     {
-        d               1e-03;
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           %%GAS_DIAMETER%%;
+        }
+        residualAlpha   1e-08;
     }
-    residualAlpha   1e-08;
-}
-
-!!PHASE2_NAME!!
-{
-    // Phase 2 (e.g., liquid) properties
-    diameterModel   constant;
-    constantCoeffs
+    liquid
     {
-        d               1e-03;
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           %%LIQUID_DIAMETER%%;
+        }
+        residualAlpha   1e-08;
     }
-    residualAlpha   1e-08;
-}
-
-!!PHASE3_NAME!!
-{
-    // Phase 3 (e.g., solid) properties
-    diameterModel   constant;
-    constantCoeffs
+    solid
     {
-        d               1e-03;
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           %%SOLID_DIAMETER%%;
+        }
+        residualAlpha   1e-08;
     }
-    residualAlpha   1e-08;
-}
+);
 
-// Interfacial tension (surface tension) for phase pairs (N/m)
 sigma
 (
-    ( !!PHASE1_NAME!! and !!PHASE2_NAME!! )   0.07
-    ( !!PHASE1_NAME!! and !!PHASE3_NAME!! )   0.00
-    ( !!PHASE2_NAME!! and !!PHASE3_NAME!! )   0.00
+    ( gas and liquid )  %%SIGMA_GAS_LIQUID%%
+    ( gas and solid  )  %%SIGMA_GAS_SOLID%%
+    ( liquid and solid) %%SIGMA_LIQUID_SOLID%%
 );
 
-// Interaction models (drag, lift, etc.) - configure as needed
 drag
 (
+    // e.g., (gas in liquid) SchillerNaumannCoeffs {  }
 );
+
 lift
 (
 );
+
 wallLubrication
 (
 );
+
 turbulentDispersion
 (
 );
+
 virtualMass
 (
 );
+
 heatTransfer
 (
 );
@@ -354,259 +416,178 @@ heatTransfer
 // ************************************************************************* //
 EOF
 
-    ##### constant/thermophysicalProperties for each phase #####
-    # Phase1 thermophysicalProperties (e.g., gas phase, compressible ideal gas)
-    cat > "$caseDir/constant/thermophysicalProperties.!!PHASE1_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  T hermo        | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   P hysical      | Version:  v2012                                 |
-|   \\  /    P roperties    | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # constant/thermophysicalProperties
+  cat > "$caseDir/constant/thermophysicalProperties" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
-    object      thermophysicalProperties.!!PHASE1_NAME!!;
+    object      thermophysicalProperties;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-thermoType
-{
-    type            heRhoThermo;
-    mixture         pureMixture;
-    transport       const;
-    thermo          hConst;
-    equationOfState perfectGas;
-    specie          specie;
-    energy          sensibleInternalEnergy;
-}
-mixture
-{
-    specie
+phases
+(
+    gas
     {
-        molWeight       28.9;
+        thermoType
+        {
+            type            heRhoThermo;
+            mixture         pureMixture;
+            transport       const;
+            thermo          hConst;
+            equationOfState perfectGas;
+            specie          specie;
+            energy          sensibleInternalEnergy;
+        }
+
+        mixture
+        {
+            specie
+            {
+                molWeight   28.9;
+            }
+            thermodynamics
+            {
+                Cp          1005;
+                Hf          0;
+            }
+            transport
+            {
+                mu          %%GAS_MU%%;
+                Pr          0.7;
+            }
+        }
     }
-    thermodynamics
+
+    liquid
     {
-        Cp              1005;
-        Hf              0;
+        thermoType
+        {
+            type            heRhoThermo;
+            mixture         pureMixture;
+            transport       const;
+            thermo          eConst;
+            equationOfState perfectFluid;
+            specie          specie;
+            energy          sensibleInternalEnergy;
+        }
+
+        mixture
+        {
+            specie
+            {
+                molWeight   18;
+            }
+            equationOfState
+            {
+                R           3000;
+                rho0        %%LIQUID_RHO%%;
+            }
+            thermodynamics
+            {
+                Cv          4182;
+                Hf          0;
+            }
+            transport
+            {
+                mu          %%LIQUID_MU%%;
+                Pr          2.289;
+            }
+        }
     }
-    transport
+
+    solid
     {
-        mu              !!PHASE1_MU!!;
-        Pr              0.7;
+        thermoType
+        {
+            type            heRhoThermo;
+            mixture         pureMixture;
+            transport       const;
+            thermo          eConst;
+            equationOfState perfectFluid;
+            specie          specie;
+            energy          sensibleInternalEnergy;
+        }
+
+        mixture
+        {
+            specie
+            {
+                molWeight   50;
+            }
+            equationOfState
+            {
+                R           3000;
+                rho0        %%SOLID_RHO%%;
+            }
+            thermodynamics
+            {
+                Cv          1000;
+                Hf          0;
+            }
+            transport
+            {
+                mu          %%SOLID_MU%%;
+                Pr          1.0;
+            }
+        }
     }
-}
+);
 
 // ************************************************************************* //
 EOF
 
-    # Phase2 thermophysicalProperties (e.g., liquid phase, treated as incompressible)
-    cat > "$caseDir/constant/thermophysicalProperties.!!PHASE2_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  T hermo        | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   P hysical      | Version:  v2012                                 |
-|   \\  /    P roperties    | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # constant/turbulenceProperties
+  cat > "$caseDir/constant/turbulenceProperties" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
-    object      thermophysicalProperties.!!PHASE2_NAME!!;
+    object      turbulenceProperties;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-thermoType
 {
-    type            heRhoThermo;
-    mixture         pureMixture;
-    transport       const;
-    thermo          eConst;
-    equationOfState perfectFluid;
-    specie          specie;
-    energy          sensibleInternalEnergy;
-}
-mixture
-{
-    specie
+    simulationType   RAS;
+
+    RAS
     {
-        molWeight       18;
-    }
-    equationOfState
-    {
-        R               3000;
-        rho0            !!PHASE2_RHO!!;
-    }
-    thermodynamics
-    {
-        Cv              4182;
-        Hf              0;
-    }
-    transport
-    {
-        mu              !!PHASE2_MU!!;
-        Pr              2.289;
+        RASModel        kOmegaSST;
+        turbulence      on;
+        printCoeffs     on;
     }
 }
 
 // ************************************************************************* //
 EOF
 
-    # Phase3 thermophysicalProperties (e.g., solid phase, treated as incompressible)
-    cat > "$caseDir/constant/thermophysicalProperties.!!PHASE3_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  T hermo        | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   P hysical      | Version:  v2012                                 |
-|   \\  /    P roperties    | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "constant";
-    object      thermophysicalProperties.!!PHASE3_NAME!!;
-}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  ############################
+  # 0/ initial fields (alphas, U.* , p, p_rgh, k, omega)
+  ############################
 
-thermoType
-{
-    type            heRhoThermo;
-    mixture         pureMixture;
-    transport       const;
-    thermo          eConst;
-    equationOfState perfectFluid;
-    specie          specie;
-    energy          sensibleInternalEnergy;
-}
-mixture
-{
-    specie
-    {
-        molWeight       50;
-    }
-    equationOfState
-    {
-        R               3000;
-        rho0            !!PHASE3_RHO!!;
-    }
-    thermodynamics
-    {
-        Cv              1000;
-        Hf              0;
-    }
-    transport
-    {
-        mu              !!PHASE3_MU!!;
-        Pr              1.0;
-    }
-}
+  # alpha.gas
+  cat > "$caseDir/0/alpha.gas" <<EOF
+$HEADER
 
-// ************************************************************************* //
-EOF
-
-    ##### constant/turbulenceProperties for each phase (all laminar by default) #####
-    cat > "$caseDir/constant/turbulenceProperties.!!PHASE1_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  T urbulence    | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   P roperties    | Version:  v2012                                 |
-|   \\  /    File           | Web:      www.OpenFOAM.com                      |
-|    \\/     Format         |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "constant";
-    object      turbulenceProperties.!!PHASE1_NAME!!;
-}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-simulationType   laminar;
-
-// ************************************************************************* //
-EOF
-
-    cat > "$caseDir/constant/turbulenceProperties.!!PHASE2_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  T urbulence    | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   P roperties    | Version:  v2012                                 |
-|   \\  /    File           | Web:      www.OpenFOAM.com                      |
-|    \\/     Format         |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "constant";
-    object      turbulenceProperties.!!PHASE2_NAME!!;
-}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-simulationType   laminar;
-
-// ************************************************************************* //
-EOF
-
-    cat > "$caseDir/constant/turbulenceProperties.!!PHASE3_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  T urbulence    | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   P roperties    | Version:  v2012                                 |
-|   \\  /    File           | Web:      www.OpenFOAM.com                      |
-|    \\/     Format         |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "constant";
-    object      turbulenceProperties.!!PHASE3_NAME!!;
-}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-simulationType   laminar;
-
-// ************************************************************************* //
-EOF
-
-    ##### 0/ initial field files #####
-    # Initial volume fraction for phase 1
-    cat > "$caseDir/0/alpha.!!PHASE1_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   I nitial       | Version:  v2012                                 |
-|   \\  /    C ondition     | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      alpha.!!PHASE1_NAME!!;
+    object      alpha.gas;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 0 0 0 0 0 0];
-internalField   uniform !!PHASE1_INIT!!;
+internalField   uniform %%INITIAL_ALPHA_GAS%%;
+
 boundaryField
 {
     inlet
@@ -626,27 +607,22 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-    # Initial volume fraction for phase 2
-    cat > "$caseDir/0/alpha.!!PHASE2_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   I nitial       | Version:  v2012                                 |
-|   \\  /    C ondition     | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # alpha.liquid
+  cat > "$caseDir/0/alpha.liquid" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      alpha.!!PHASE2_NAME!!;
+    object      alpha.liquid;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 0 0 0 0 0 0];
-internalField   uniform !!PHASE2_INIT!!;
+internalField   uniform %%INITIAL_ALPHA_LIQUID%%;
+
 boundaryField
 {
     inlet
@@ -666,27 +642,22 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-    # Initial volume fraction for phase 3
-    cat > "$caseDir/0/alpha.!!PHASE3_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   I nitial       | Version:  v2012                                 |
-|   \\  /    C ondition     | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # alpha.solid
+  cat > "$caseDir/0/alpha.solid" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      alpha.!!PHASE3_NAME!!;
+    object      alpha.solid;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 0 0 0 0 0 0];
-internalField   uniform !!PHASE3_INIT!!;
+internalField   uniform %%INITIAL_ALPHA_SOLID%%;
+
 boundaryField
 {
     inlet
@@ -706,33 +677,28 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-    # Initial velocity field for phase 1
-    cat > "$caseDir/0/U.!!PHASE1_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  V elocity      | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   I nitial       | Version:  v2012                                 |
-|   \\  /    C ondition     | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # U.gas
+  cat > "$caseDir/0/U.gas" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       volVectorField;
     location    "0";
-    object      U.!!PHASE1_NAME!!;
+    object      U.gas;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 1 -1 0 0 0 0];
 internalField   uniform (0 0 0);
+
 boundaryField
 {
     inlet
     {
         type            fixedValue;
-        value           uniform (0 0 0);
+        value           uniform %%GAS_INLET_VEL%%;
     }
     outlet
     {
@@ -748,27 +714,22 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-    # Initial velocity field for phase 2
-    cat > "$caseDir/0/U.!!PHASE2_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  V elocity      | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   I nitial       | Version:  v2012                                 |
-|   \\  /    C ondition     | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # U.liquid
+  cat > "$caseDir/0/U.liquid" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       volVectorField;
     location    "0";
-    object      U.!!PHASE2_NAME!!;
+    object      U.liquid;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 1 -1 0 0 0 0];
 internalField   uniform (0 0 0);
+
 boundaryField
 {
     inlet
@@ -790,27 +751,22 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-    # Initial velocity field for phase 3
-    cat > "$caseDir/0/U.!!PHASE3_NAME!!" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  V elocity      | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   I nitial       | Version:  v2012                                 |
-|   \\  /    C ondition     | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # U.solid
+  cat > "$caseDir/0/U.solid" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       volVectorField;
     location    "0";
-    object      U.!!PHASE3_NAME!!;
+    object      U.solid;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 1 -1 0 0 0 0];
 internalField   uniform (0 0 0);
+
 boundaryField
 {
     inlet
@@ -832,15 +788,47 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-    # Initial pressure field (p)
-    cat > "$caseDir/0/p" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  P ressure      | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   I nitial       | Version:  v2012                                 |
-|   \\  /    C ondition     | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # 0/nut (turbulent kinematic viscosity for RAS)
+  cat > "$caseDir/0/nut" <<EOF
+$HEADER
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      nut;
+}
+
+dimensions      [0 2 -1 0 0 0 0];
+internalField   uniform %%NUT_INIT%%;
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           uniform %%NUT_INIT%%;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    walls
+    {
+        type            nutkWallFunction;
+        value           uniform %%NUT_INIT%%;
+    }
+}
+
+// ************************************************************************* //
+EOF
+
+  # p
+  cat > "$caseDir/0/p" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
@@ -849,10 +837,10 @@ FoamFile
     location    "0";
     object      p;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [1 -1 -2 0 0 0 0];
 internalField   uniform 0;
+
 boundaryField
 {
     inlet
@@ -873,15 +861,10 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-    # Initial pressure field (p_rgh)
-    cat > "$caseDir/0/p_rgh" <<'EOF'
-/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \\      /  P ressure      | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   (rgh) Initial  | Version:  v2012                                 |
-|   \\  /    C ondition     | Web:      www.OpenFOAM.com                      |
-|    \\/     File           |                                                 |
-\*---------------------------------------------------------------------------*/
+  # p_rgh
+  cat > "$caseDir/0/p_rgh" <<EOF
+$HEADER
+
 FoamFile
 {
     version     2.0;
@@ -890,10 +873,10 @@ FoamFile
     location    "0";
     object      p_rgh;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [1 -1 -2 0 0 0 0];
 internalField   uniform 0;
+
 boundaryField
 {
     inlet
@@ -917,20 +900,402 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-    ##### Allrun script (to automate case execution) #####
-    cat > "$caseDir/Allrun" <<'EOF'
-#!/bin/bash
-# Allrun - run all case setup and simulation steps
-cd "${0%/*}" || exit 1    # Ensure running in case directory
-# Source OpenFOAM run functions (requires OpenFOAM environment)
-[ -z "$WM_PROJECT_DIR" ] && { echo "Error: OpenFOAM environment not loaded."; exit 1; }
-. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+  # k (turbulent kinetic energy, liquid phase RANS support)
+  cat > "$caseDir/0/k" <<EOF
+$HEADER
 
-runApplication blockMesh
-# runApplication setFields   # (uncomment if using setFields for initial phase distribution)
-runApplication !!SOLVER!!
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      k;
+}
 
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform %%K_INIT%%;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform %%K_INIT%%;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    walls
+    {
+        type            kqRWallFunction;
+        value           uniform %%K_INIT%%;
+    }
+}
+
+// ************************************************************************* //
 EOF
 
-    chmod +x "$caseDir/Allrun"
+  # omega (specific dissipation rate)
+  cat > "$caseDir/0/omega" <<EOF
+$HEADER
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      omega;
 }
+
+dimensions      [0 0 -1 0 0 0 0];
+internalField   uniform %%OMEGA_INIT%%;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform %%OMEGA_INIT%%;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    walls
+    {
+        type            omegaWallFunction;
+        value           uniform %%OMEGA_INIT%%;
+    }
+}
+
+// ************************************************************************* //
+EOF
+
+  # Allrun
+  cat > "$caseDir/Allrun" <<'EOF'
+#!/usr/bin/env bash
+# Allrun - generic run driver (requires OpenFOAM environment)
+
+cd "${0%/*}" || exit 1
+
+if [ -z "$WM_PROJECT_DIR" ]; then
+  echo "Error: OpenFOAM environment not loaded. Source your OpenFOAM bashrc first."
+  exit 1
+fi
+
+blockMesh || { echo "blockMesh failed"; exit 1; }
+
+# Uncomment if using setFields or additional preprocessing
+# setFields
+
+multiphaseEulerFoam || { echo "Solver failed"; exit 1; }
+EOF
+  chmod +x "$caseDir/Allrun"
+
+  # --- ensure triSurface folder exists ---
+  mkdir -p "$caseDir/constant/triSurface"
+
+  # system/snappyHexMeshDict
+  cat > "$caseDir/system/snappyHexMeshDict" <<EOF
+$HEADER
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       dictionary;
+    location    "system";
+    object      snappyHexMeshDict;
+}
+
+// Required by v2506 (top-level)
+castellatedMesh     true;
+snap                true;
+addLayers           false;
+mergeTolerance      1e-6;
+
+geometry
+{
+    pbr_fluid.stl
+    {
+        type triSurfaceMesh;
+        name pbr;
+    }
+
+    inletBox
+    {
+        type searchableBox;
+        min (0 0 0);
+        max (%%LENGTH%% %%WIDTH%% %%INLET_BOX_Z%%);
+    }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells           %%MAX_LOCAL_CELLS%%;
+    maxGlobalCells          %%MAX_GLOBAL_CELLS%%;
+    minRefinementCells      %%MIN_REFINEMENT_CELLS%%;
+    nCellsBetweenLevels     %%N_CELLS_BETWEEN_LEVELS%%;
+
+    features                ();     // no explicit feature edges required
+
+    refinementSurfaces
+    {
+        pbr
+        {
+            level (%%SURFACE_LEVEL_MIN%% %%SURFACE_LEVEL_MAX%%);
+
+            // Optional: create zones (handy if you want to address faces later)
+            faceZone        pbrFaces;
+            cellZone        pbrCells;
+            cellZoneInside  inside;
+
+            patchInfo
+            {
+                type wall;
+            }
+        }
+    }
+
+    refinementRegions
+    {
+        inletBox
+        {
+            mode inside;
+            // very large distance selects the whole box
+            levels ((1e15 %%INLET_BOX_LEVEL%%));
+        }
+    }
+
+    resolveFeatureAngle     %%RESOLVE_FEATURE_ANGLE%%;
+
+    // MUST be inside the STL fluid volume
+    locationInMesh (%%LIM_X%% %%LIM_Y%% %%LIM_Z%%);
+
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch            3;
+    tolerance               2.0;
+    nSolveIter              30;
+    nRelaxIter              5;
+
+    // optional (can improve snapping on curved cylinders)
+    implicitFeatureSnap     true;
+    explicitFeatureSnap     false;
+    multiRegionSnap         false;
+}
+
+addLayersControls
+{
+    relativeSizes   true;
+    layers          {};
+    nSurfaceLayers  0;
+}
+
+meshQualityControls
+{
+    maxNonOrtho             65;
+    maxBoundarySkewness     20;
+    maxInternalSkewness     4;
+    maxConcave              80;
+    minVol                  1e-13;
+    minTetQuality           1e-9;
+    minArea                 1e-13;
+    minTwist                0.02;
+    minDeterminant          0.001;
+    minFaceWeight           0.02;
+    minVolRatio             0.01;
+    minTriangleTwist        0.02;
+    nSmoothScale            4;
+    errorReduction          0.75;
+}
+
+// ************************************************************************* //
+EOF
+
+  # Allmesh
+  cat > "$caseDir/Allmesh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${0%/*}" || exit 1
+
+LENGTH="%%LENGTH%%"
+WIDTH="%%WIDTH%%"
+HEIGHT="%%HEIGHT%%"
+NX="%%NX%%"
+NY="%%NY%%"
+NZ="%%NZ%%"
+
+NB="%%NB%%"
+BAFFLE_RADIUS="%%BAFFLE_RADIUS%%"
+
+PBR_SCAD="%%PBR_SCAD%%"
+
+TRISURF_DIR="constant/triSurface"
+TRISURF_FILE="${TRISURF_DIR}/pbr_fluid.stl"
+
+if [ -z "${WM_PROJECT_DIR-}" ]; then
+  echo "Error: OpenFOAM environment not loaded. Source your OpenFOAM bashrc first." >&2
+  exit 1
+fi
+
+mkdir -p "$TRISURF_DIR"
+
+if [ "$NB" -gt 0 ]; then
+  command -v openscad >/dev/null 2>&1 || { echo "Error: openscad not found"; exit 1; }
+  echo "[Allmesh] OpenSCAD -> ${TRISURF_FILE}"
+  openscad -o "${TRISURF_FILE}" \
+    -D MODE=1 \
+    -D W="${LENGTH}" -D H="${HEIGHT}" -D D="${WIDTH}" \
+    -D NB="${NB}" -D R="${BAFFLE_RADIUS}" \
+    "${PBR_SCAD}"
+else
+  echo "[Allmesh] NB==0 -> no STL, pure blockMesh."
+fi
+
+echo "[Allmesh] blockMesh"
+blockMesh
+
+if [ "$NB" -gt 0 ]; then
+  echo "[Allmesh] snappyHexMesh -overwrite"
+  snappyHexMesh -overwrite
+fi
+
+echo "[Allmesh] renumberMesh -overwrite"
+renumberMesh -overwrite || true
+
+echo "[Allmesh] checkMesh"
+checkMesh -allTopology -allGeometry || true
+
+echo "[Allmesh] Done."
+EOF
+  chmod +x "$caseDir/Allmesh"
+
+
+  # pv.foam
+  cat > "$caseDir/pv.foam" <<EOF
+EOF
+
+  # constant/transportProperties (v2506 expects this dictionary to exist)
+  cat > "$caseDir/constant/transportProperties" <<EOF
+$HEADER
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+
+phases
+(
+    gas
+    {
+        rho             %%GAS_RHO%%;
+        nu              %%GAS_NU%%;
+        kappa           0;
+        Cp              0;
+
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           %%GAS_DIAMETER%%;
+        }
+    }
+
+    liquid
+    {
+        rho             %%LIQUID_RHO%%;
+        nu              %%LIQUID_NU%%;
+        kappa           0;
+        Cp              0;
+
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           %%LIQUID_DIAMETER%%;
+        }
+    }
+
+    solid
+    {
+        rho             %%SOLID_RHO%%;
+        nu              %%SOLID_NU%%;
+        kappa           0;
+        Cp              0;
+
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           %%SOLID_DIAMETER%%;
+        }
+    }
+);
+
+
+sigmas
+(
+    // (gas liquid) 0.072;
+    // (gas solid)  0;
+    // (liquid solid) 0;
+);
+
+interfaceCompression
+(
+    // Optional interface compression per pair, leave empty to use fvSchemes/method
+);
+
+virtualMass
+(
+    (gas liquid) 0.5
+    // (gas solid)  0.0
+    // (liquid solid) 0.0
+);
+
+drag
+(
+    (gas liquid)
+    {
+        type blended;
+        gas
+        {
+            type SchillerNaumann;
+            residualPhaseFraction 0;
+            residualSlip 0;
+        }
+        liquid
+        {
+            type SchillerNaumann;
+            residualPhaseFraction 0;
+            residualSlip 0;
+        }
+        residualPhaseFraction 1e-3;
+        residualSlip          1e-3;
+    }
+
+    (solid liquid)
+    {
+        type SchillerNaumann;   // simple, robust default; swap if you prefer Gibilaro/WenYu
+        residualPhaseFraction 1e-6;
+        residualSlip          1e-6;
+    }
+);
+
+
+// Dummy entries required by some models (safe to leave as is)
+transportModel  Newtonian;
+nu              0;
+
+// ************************************************************************* //
+
+EOF
+}
+

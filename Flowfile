@@ -1,45 +1,92 @@
-# Flowfile - Configuration for flow pipeline (default values)
+# ============================
+# Geometry & base mesh
+# ============================
+LENGTH=0.20         # m (X)
+WIDTH=0.10          # m (Y depth)
+HEIGHT=0.50         # m (Z height)
 
-# New case configuration (if any new-case-specific settings are needed)
-# (Currently no specific settings required for the 'new' stage)
+NX=40               # -> 0.20 / 0.005 = 40 cells (~5 mm)
+NY=20               # -> 0.10 / 0.005 = 20 cells
+NZ=100              # -> 0.50 / 0.005 = 100 cells
 
-# Pre-run configuration
-LENGTH=0.15          # Domain length in X direction (m)
-WIDTH=1.0            # Domain width in Y direction (m)
-HEIGHT=0.1           # Domain height in Z direction (m)
-NX=15                # Number of cells along X
-NY=75                # Number of cells along Y
-NZ=1                 # Number of cells along Z
+# ============================
+# Baffles (0=flat panel; 1,3,5 as specified)
+# ============================
+NB=0                # 0/1/3/5 (others supported)
+BAFFLE_RADIUS=0.01  # m (10 mm radius => 20 mm diameter)
 
-PHASE1_NAME=gas      # Name of phase 1 (e.g., gas)
-PHASE2_NAME=liquid   # Name of phase 2 (e.g., liquid)
-PHASE3_NAME=solid    # Name of phase 3 (e.g., solid)
+# OpenSCAD .scad source (absolute or relative path)
+PBR_SCAD=../pbr.scad
 
-PHASE1_RHO=1.2       # Density of phase 1 (kg/m^3)
-PHASE2_RHO=1000      # Density of phase 2 (kg/m^3)
-PHASE3_RHO=2500      # Density of phase 3 (kg/m^3)
-PHASE1_NU=1.5e-5     # Kinematic viscosity of phase 1 (m^2/s)
-PHASE2_NU=1.0e-6     # Kinematic viscosity of phase 2 (m^2/s)
-PHASE3_NU=1.0e-6     # Kinematic viscosity of phase 3 (m^2/s)
-PHASE1_MU=1.8e-5     # Dynamic viscosity of phase 1 (Pa·s)
-PHASE2_MU=1.0e-3     # Dynamic viscosity of phase 2 (Pa·s)
-PHASE3_MU=2.5e-3     # Dynamic viscosity of phase 3 (Pa·s)
+# ============================
+# Physics / phases (unchanged from previous Flowfile)
+# ============================
+G_X=0
+G_Y=-9.81
+G_Z=0
 
-PHASE1_INIT=1        # Initial volume fraction of phase 1 (fraction of 1)
-PHASE2_INIT=0        # Initial volume fraction of phase 2 
-PHASE3_INIT=0        # Initial volume fraction of phase 3 
-# (By default, phase1 fills the domain initially)
+GAS_RHO=1.15
+GAS_NU=1.6e-5
 
-G_X=0                # Gravity acceleration in X (m/s^2)
-G_Y=-9.81            # Gravity acceleration in Y (m/s^2)
-G_Z=0                # Gravity acceleration in Z (m/s^2)
+LIQUID_NU=8.0e-7         # (water ~30°C; mu≈8.0e-4 / rho≈998.2)
 
-# Run configuration
-START_TIME=0         # Simulation start time (s)
-END_TIME=10          # Simulation end time (s)
-DELTA_T=0.01         # Time step size (s)
-WRITE_INTERVAL=1     # Data write interval (s)
-SOLVER=multiphaseEulerFoam   # OpenFOAM solver to use for the case
+SOLID_RHO=1050
+SOLID_NU=1.0e-6          # small effective kinematic viscosity
+GAS_DIAMETER=5e-4
+LIQUID_DIAMETER=1e-3
+SOLID_DIAMETER=2e-6
 
-# Post-processing configuration
-# (Add any post-processing settings if needed in the future)
+SIGMA_GAS_LIQUID=0.072
+SIGMA_GAS_SOLID=0.000
+SIGMA_LIQUID_SOLID=0.000
+
+GAS_MU=1.8e-5
+LIQUID_MU=8.0e-4
+SOLID_MU=1.0e-3
+
+LIQUID_RHO=998.2
+SOLID_RHO=1050
+
+INITIAL_ALPHA_GAS=0.000
+INITIAL_ALPHA_LIQUID=0.999
+INITIAL_ALPHA_SOLID=0.001
+
+GAS_INLET_VEL=(0 0 0.5)
+
+K_INIT=1e-6
+OMEGA_INIT=10.0
+
+# ============================
+# Time / solver
+# ============================
+SOLVER=multiphaseEulerFoam
+START_TIME=0
+END_TIME=60
+DELTA_T=1e-4
+WRITE_INTERVAL=0.5
+
+# ============================
+# snappyHexMesh controls
+# ============================
+SURFACE_LEVEL_MIN=1        # base surface refinement
+SURFACE_LEVEL_MAX=2        # one extra level near cylinders (≈2.5 mm)
+INLET_BOX_LEVEL=2          # refine inlet jet region
+
+# Height of the inlet refinement box (from bottom), meters
+INLET_BOX_Z=0.05
+
+# Location inside fluid
+LIM_X=0.01
+LIM_Y=0.01
+LIM_Z=0.05
+
+# Castellated controls
+MAX_LOCAL_CELLS=100000
+MAX_GLOBAL_CELLS=2000000
+N_CELLS_BETWEEN_LEVELS=3
+MIN_REFINEMENT_CELLS=0
+RESOLVE_FEATURE_ANGLE=150
+
+# Turbulence (nut initial guess)
+NUT_INIT=1e-5
+

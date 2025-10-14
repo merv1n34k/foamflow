@@ -1,6 +1,6 @@
 # Foamflow
 
-Foamflow is a simple pipeline manager to populate and orchistrate openfoam case
+Foamflow is a simple pipeline manager to populate and orchestrate openfoam case
 files. For it to work you only need to define case temple - `case.template`,
 actual pipeline - `do_*` in `flow` script and `Flowfile` for configurable
 values.

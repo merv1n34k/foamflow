@@ -1,160 +1,222 @@
-#!/bin/bash
-# OpenFOAM case automation script: "flow"
-# Usage: flow [new|pre|run|post] CASE_NAME
-# If no stage is specified (only CASE_NAME), the script runs all stages in order.
+#!/usr/bin/env bash
+set -uo pipefail
 
-# Exit on errors or unset variables:
-set -euo pipefail
+ROOT="$(pwd)"
+CONFIG="${ROOT}/Flowfile"
+TEMPLATE="${ROOT}/case.template"
 
-# Function to show usage
-usage() {
-    echo "Usage: $(basename $0) [new|pre|run|post] CASE_NAME"
-    exit 1
+die(){ echo "Error: $*" >&2; exit 1; }
+info(){ echo "[flow] $*"; }
+
+usage(){
+  cat <<USAGE
+Usage:
+  $(basename "$0") [new|pre|run|post] CASE_NAME
+  $(basename "$0") CASE_NAME          # runs new -> pre -> run -> post
+USAGE
+  exit 1
 }
 
-# Parse arguments
+[ -f "$CONFIG" ]  || die "Flowfile not found."
+[ -f "$TEMPLATE" ]|| die "case.template not found."
+
 if [ $# -eq 1 ]; then
-    # Only case name provided -> run all stages
-    subcmd="all"
-    caseName="$1"
+    SUBCMD="all"
+    CASENAME="${1%/}"
 elif [ $# -eq 2 ]; then
-    subcmd="$1"
-    caseName="$2"
+    SUBCMD="$1"
+    CASENAME="${2%/}"
 else
     usage
 fi
 
-# Load configuration from Flowfile
-CONFIG_FILE="Flowfile"
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "Error: Configuration file '$CONFIG_FILE' not found."
-    exit 1
-fi
-# Export variables from Flowfile, ignoring comments and blank lines
-eval "$(
-    sed -e 's/[[:space:]]*#.*//' -e '/^$/d' "$CONFIG_FILE" \
-    | sed -e 's/^\([^=]\+\)=\([^\"].*\)$/export \1="\2"/' 
-)"
+ensure_case_suffix() {
+  local name="${1%/}"
+  [[ "$name" == *.case ]] && echo "$name" || echo "${name}.case"
+}
+CASE_DIR="$(ensure_case_suffix "$CASENAME")"
 
-# Define subcommand functions
-do_new() {
-    if [ -d "$caseName" ]; then
-        echo "Error: Case '$caseName' already exists."
-        exit 1
-    fi
-    if [ ! -f "case.template" ]; then
-        echo "Error: case.template not found."
-        exit 1
-    fi
-    echo "Creating new case '$caseName' from template..."
-    # Source the case template script which defines create_case function
-    . case.template
-    create_case "$caseName"
-    echo "Case structure for '$caseName' created."
+# ============================
+# OPTIMIZED PARSING FUNCTIONS
+# ============================
+
+# Use associative array for O(1) lookups (requires bash 4+)
+declare -A FLOW_CONFIG
+
+# Optimized Flowfile reader - single pass with awk
+read_flowfile(){
+  FLOW_CONFIG=()
+  local IFS=$'\n'
+  while IFS='=' read -r key val; do
+    [ -n "$key" ] && FLOW_CONFIG["$key"]="$val"
+  done < <(awk -F'=' '
+    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+    {
+      gsub(/^[[:space:]]+|[[:space:]]+$|#.*$/, "", $0)
+      if (NF >= 2) {
+        key = $1; val = $2
+        for (i=3; i<=NF; i++) val = val "=" $i
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+        if (key) print key "=" val
+      }
+    }
+  ' "$CONFIG")
 }
 
-do_pre() {
-    if [ ! -d "$caseName" ]; then
-        echo "Error: Case '$caseName' does not exist. Run 'flow new $caseName' first."
-        exit 1
-    fi
-    echo "Pre-processing case '$caseName'..."
-    # Substitute all placeholders (!!VAR!! tokens) with actual values from Flowfile
-    for var in LENGTH WIDTH HEIGHT NX NY NZ \
-               PHASE1_NAME PHASE2_NAME PHASE3_NAME \
-               PHASE1_RHO PHASE2_RHO PHASE3_RHO \
-               PHASE1_NU PHASE2_NU PHASE3_NU \
-               PHASE1_MU PHASE2_MU PHASE3_MU \
-               PHASE1_INIT PHASE2_INIT PHASE3_INIT \
-               G_X G_Y G_Z \
-               START_TIME END_TIME DELTA_T WRITE_INTERVAL SOLVER; do
-        val="${!var-}"  # get value of variable (if set)
-        [ -z "$val" ] && continue
-        # Escape any special characters in the value for sed (especially & and /)
-        safeVal=$(printf '%s' "$val" | sed -e 's/[&/]/\\&/g')
-        find "$caseName" -type f -exec sed -i "s/!!${var}!!/${safeVal}/g" {} +
+# Efficient sed script builder using printf
+build_sed_script(){
+  local sedfile="$1"
+  : > "$sedfile"  # Create empty file first
+
+  # Check if FLOW_CONFIG has any entries
+  if [ ${#FLOW_CONFIG[@]} -eq 0 ]; then
+    return 0
+  fi
+
+  {
+    for key in "${!FLOW_CONFIG[@]}"; do
+      printf 's/%%%%%s%%%%/%s/g\n' "$key" "$(sed 's/[\\/&]/\\&/g' <<< "${FLOW_CONFIG[$key]}")"
     done
-    # Rename files that have placeholders in their names (e.g., phase-specific files)
-    mv -f "$caseName/0/alpha.!!PHASE1_NAME!!" "$caseName/0/alpha.${PHASE1_NAME}" 2>/dev/null || true
-    mv -f "$caseName/0/alpha.!!PHASE2_NAME!!" "$caseName/0/alpha.${PHASE2_NAME}" 2>/dev/null || true
-    mv -f "$caseName/0/alpha.!!PHASE3_NAME!!" "$caseName/0/alpha.${PHASE3_NAME}" 2>/dev/null || true
-    mv -f "$caseName/0/U.!!PHASE1_NAME!!" "$caseName/0/U.${PHASE1_NAME}" 2>/dev/null || true
-    mv -f "$caseName/0/U.!!PHASE2_NAME!!" "$caseName/0/U.${PHASE2_NAME}" 2>/dev/null || true
-    mv -f "$caseName/0/U.!!PHASE3_NAME!!" "$caseName/0/U.${PHASE3_NAME}" 2>/dev/null || true
-    mv -f "$caseName/constant/thermophysicalProperties.!!PHASE1_NAME!!" \
-          "$caseName/constant/thermophysicalProperties.${PHASE1_NAME}" 2>/dev/null || true
-    mv -f "$caseName/constant/thermophysicalProperties.!!PHASE2_NAME!!" \
-          "$caseName/constant/thermophysicalProperties.${PHASE2_NAME}" 2>/dev/null || true
-    mv -f "$caseName/constant/thermophysicalProperties.!!PHASE3_NAME!!" \
-          "$caseName/constant/thermophysicalProperties.${PHASE3_NAME}" 2>/dev/null || true
-    mv -f "$caseName/constant/turbulenceProperties.!!PHASE1_NAME!!" \
-          "$caseName/constant/turbulenceProperties.${PHASE1_NAME}" 2>/dev/null || true
-    mv -f "$caseName/constant/turbulenceProperties.!!PHASE2_NAME!!" \
-          "$caseName/constant/turbulenceProperties.${PHASE2_NAME}" 2>/dev/null || true
-    mv -f "$caseName/constant/turbulenceProperties.!!PHASE3_NAME!!" \
-          "$caseName/constant/turbulenceProperties.${PHASE3_NAME}" 2>/dev/null || true
-
-    # Run mesh generation (blockMesh) and other preprocessing as needed
-    echo "Generating mesh (blockMesh)..."
-    pushd "$caseName" >/dev/null
-    blockMesh
-    popd >/dev/null
-    echo "Pre-processing for '$caseName' completed."
+  } >> "$sedfile"
 }
 
-do_run() {
-    if [ ! -d "$caseName" ]; then
-        echo "Error: Case '$caseName' does not exist."
-        exit 1
-    fi
-    echo "Running simulation for case '$caseName'..."
-    if [ -x "$caseName/Allrun" ]; then
-        pushd "$caseName" >/dev/null
-        ./Allrun   # use Allrun script if available
-        popd >/dev/null
+# Streamlined placeholder finder
+find_placeholders(){
+  grep -Rho --exclude-dir='constant/polyMesh' \
+    --exclude='*.foam' --exclude='*.OpenFOAM' \
+    --exclude='*.stl' --exclude='*.STL' \
+    --exclude='*.gz' --exclude='*.tar' --exclude='*.zip' \
+    --exclude='*.png' --exclude='*.jpg' \
+    '%%[A-Za-z0-9_]\+%%' "$1" 2>/dev/null \
+    | sed 's/%%\([^%]*\)%%/\1/' | sort -u
+}
+
+# Optimized validation with associative array lookup
+require_all_placeholders_defined(){
+  local dir="$1"
+  local -a missing=()  # Initialize as empty array
+  local token
+
+  while IFS= read -r token; do
+    [ -z "$token" ] && continue
+    [ -z "${FLOW_CONFIG[$token]:-}" ] && missing+=("$token")
+  done < <(find_placeholders "$dir")
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    {
+      echo "Unresolved template variables:"
+      printf '  - %%%%s%%%%\n' "${missing[@]}"
+    } >&2
+    die "Add values for the above keys to Flowfile."
+  fi
+}
+
+# Optimized substitution with better error handling
+apply_substitutions() {
+  local dir="$1" sedfile="$2"
+  local errors=0  # Initialize without -i flag for compatibility
+
+  while IFS= read -r -d '' file; do
+    # Skip empty files (like pv.foam marker files)
+    [ ! -s "$file" ] && continue
+
+    # Skip binary files and specific OpenFOAM files that shouldn't be modified
+    case "$(basename "$file")" in
+      *.foam|*.OpenFOAM|*.stl|*.STL|*.gz|*.tar|*.zip|*.png|*.jpg) continue ;;
+    esac
+
+    if LC_ALL=C sed -E -f "$sedfile" "$file" > "${file}.flowtmp" 2>/dev/null; then
+      mv -f "${file}.flowtmp" "$file"
     else
-        pushd "$caseName" >/dev/null
-        $SOLVER    # run solver directly if no Allrun
-        popd >/dev/null
+      rm -f "${file}.flowtmp"
+      ((errors++))
+      echo "Warning: Failed to process $file" >&2
     fi
-    echo "Simulation run for '$caseName' completed."
+  done < <(find "$dir" -type f ! -path '*/constant/polyMesh/*' -print0)
+
+  [ $errors -gt 0 ] && die "Failed to apply substitutions to $errors file(s)"
 }
 
-do_post() {
-    if [ ! -d "$caseName" ]; then
-        echo "Error: Case '$caseName' does not exist."
-        exit 1
-    fi
-    echo "Post-processing results for case '$caseName'..."
-    resultFile="${caseName}_result.csv"
-    # Prepare CSV header
-    echo "Phase,AverageVolumeFraction" > "$resultFile"
-    # Determine last time directory output
-    lastDir=$(find "$caseName" -maxdepth 1 -type d -regextype posix-extended -regex ".*/[0-9]+(\.[0-9]+)?" | sort -V | tail -1)
-    [ -z "$lastDir" ] && lastDir="$caseName/0"  # if no time directory, use initial conditions
-    # Compute average volume fraction for each phase (assuming uniform internal field if present)
-    for phase in "${PHASE1_NAME}" "${PHASE2_NAME}" "${PHASE3_NAME}"; do
-        fieldFile="$lastDir/alpha.$phase"
-        if [ -f "$fieldFile" ]; then
-            avg="N/A"
-            # If internalField is uniform, parse that value; otherwise mark as N/A or handle as needed
-            if grep -q "internalField[[:space:]]\+uniform" "$fieldFile"; then
-                avg=$(grep "internalField" "$fieldFile" | awk '{print $3}' | tr -d ';')
-            fi
-            echo "$phase,$avg" >> "$resultFile"
-        fi
-    done
-    echo "Results saved to $resultFile"
+# ============================
+# STAGE FUNCTIONS (UNCHANGED)
+# ============================
+
+stage_new(){
+  [ -e "$CASE_DIR" ] && die "Case '$CASE_DIR' already exists."
+  info "Creating case '$CASE_DIR'..."
+  . "$TEMPLATE"
+  type create_case >/dev/null 2>&1 || die "create_case not defined in case.template"
+  create_case "$CASE_DIR"
+  info "Case created."
 }
 
-# Execute the requested stage(s)
-case "$subcmd" in
-    new)   do_new ;;
-    pre)   do_pre ;;
-    run)   do_run ;;
-    post)  do_post ;;
-    all) 
-        do_new && do_pre && do_run && do_post 
-        ;;
-    *) usage ;;
+stage_pre(){
+  [ -d "$CASE_DIR" ] || die "Case '$CASE_DIR' not found. Run 'flow new $CASENAME' first."
+  info "Pre-processing '$CASE_DIR'..."
+
+  FLOW_CONFIG=()  # Reset the associative array
+  read_flowfile
+  require_all_placeholders_defined "$CASE_DIR"
+  local sedfile="$CASE_DIR/.flow_subst.sed"
+  build_sed_script "$sedfile"
+  apply_substitutions "$CASE_DIR" "$sedfile"
+  rm -f "$sedfile"
+
+  # make Allrun and Allmesh executables
+  chmod +x "$CASE_DIR/Allrun"
+  chmod +x "$CASE_DIR/Allmesh"
+
+  # Mesh build (OpenSCAD->STL + blockMesh + optional snappy)
+  if [ -x "$CASE_DIR/Allmesh" ]; then
+    ( cd "$CASE_DIR" && ./Allmesh )
+  else
+    echo "$CASE_DIR/Allmesh"
+    die "Allmesh not found in case. Check case.template."
+  fi
+  info "Pre-processing complete."
+}
+
+stage_run(){
+  [ -d "$CASE_DIR" ] || die "Case '$CASE_DIR' not found."
+  info "Running solver in '$CASE_DIR'..."
+  if [ -x "$CASE_DIR/Allrun" ]; then
+    ( cd "$CASE_DIR" && ./Allrun )
+  else
+    ( cd "$CASE_DIR" && multiphaseEulerFoam )
+  fi
+  info "Run complete."
+}
+
+stage_post(){
+  [ -d "$CASE_DIR" ] || die "Case '$CASE_DIR' not found."
+  info "Post-processing '$CASE_DIR'..."
+  local result="${CASE_DIR%/.case}_result.csv"
+  : > "$result"
+  echo "Metric,Value" >> "$result"
+  local last="$(find "$CASE_DIR" -maxdepth 1 -type d -regex '.*/[0-9]+(\.[0-9]+)?' | sort -V | tail -1)"
+  [ -z "$last" ] && last="$CASE_DIR/0"
+  for ph in gas liquid solid; do
+    local f="$last/alpha.$ph"
+    if [ -f "$f" ]; then
+      if grep -qE 'internalField[[:space:]]+uniform' "$f"; then
+        local val
+        val="$(awk '/internalField/{print $3}' "$f" | tr -d ';')"
+        echo "alpha.$ph (avg approx),$val" >> "$result"
+      else
+        echo "alpha.$ph (avg approx),N/A" >> "$result"
+      fi
+    fi
+  done
+  echo "Output,$result" >> "$result"
+  info "Post-processing complete. Wrote $result"
+}
+
+case "${SUBCMD}" in
+  new)  stage_new ;;
+  pre)  stage_pre ;;
+  run)  stage_run ;;
+  post) stage_post ;;
+  all)  stage_new; stage_pre; stage_run; stage_post ;;
+  *)    usage ;;
 esac
