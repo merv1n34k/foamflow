@@ -50,7 +50,8 @@ read_flowfile(){
   while IFS='=' read -r key val; do
     [ -n "$key" ] && FLOW_CONFIG["$key"]="$val"
   done < <(awk -F'=' '
-    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
     {
       gsub(/^[[:space:]]+|[[:space:]]+$|#.*$/, "", $0)
       if (NF >= 2) {
@@ -76,7 +77,12 @@ build_sed_script(){
 
   {
     for key in "${!FLOW_CONFIG[@]}"; do
-      printf 's/%%%%%s%%%%/%s/g\n' "$key" "$(sed 's/[\\/&]/\\&/g' <<< "${FLOW_CONFIG[$key]}")"
+      # Use bash parameter expansion for escaping (more portable)
+      local val="${FLOW_CONFIG[$key]}"
+      val="${val//\\/\\\\}"  # Escape backslashes
+      val="${val//&/\\&}"     # Escape ampersands
+      val="${val//\//\\/}"    # Escape forward slashes
+      printf 's/%%%%%s%%%%/%s/g\n' "$key" "$val"
     done
   } >> "$sedfile"
 }
@@ -126,7 +132,7 @@ apply_substitutions() {
       *.foam|*.OpenFOAM|*.stl|*.STL|*.gz|*.tar|*.zip|*.png|*.jpg) continue ;;
     esac
 
-    if LC_ALL=C sed -E -f "$sedfile" "$file" > "${file}.flowtmp" 2>/dev/null; then
+    if LC_ALL=C sed -f "$sedfile" "$file" > "${file}.flowtmp" 2>/dev/null; then
       mv -f "${file}.flowtmp" "$file"
     else
       rm -f "${file}.flowtmp"
