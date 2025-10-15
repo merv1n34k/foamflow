@@ -8,145 +8,68 @@ TEMPLATE="${ROOT}/case.template"
 die(){ echo "Error: $*" >&2; exit 1; }
 info(){ echo "[flow] $*"; }
 
-usage(){
-  cat <<USAGE
-Usage:
-  $(basename "$0") [new|pre|run|post] CASE_NAME
-  $(basename "$0") CASE_NAME          # runs new -> pre -> run -> post
-USAGE
-  exit 1
-}
-
-[ -f "$CONFIG" ]  || die "Flowfile not found."
-[ -f "$TEMPLATE" ]|| die "case.template not found."
+[ -f "$CONFIG" ] || die "Flowfile not found."
+[ -f "$TEMPLATE" ] || die "case.template not found."
 
 if [ $# -eq 1 ]; then
-    SUBCMD="all"
-    CASENAME="${1%/}"
+    SUBCMD="all"; CASENAME="${1%/}"
 elif [ $# -eq 2 ]; then
-    SUBCMD="$1"
-    CASENAME="${2%/}"
+    SUBCMD="$1"; CASENAME="${2%/}"
 else
-    usage
+    echo "Usage: $(basename "$0") [new|pre|run|post] CASE_NAME"; exit 1
 fi
 
-ensure_case_suffix() {
-  local name="${1%/}"
-  [[ "$name" == *.case ]] && echo "$name" || echo "${name}.case"
-}
-CASE_DIR="$(ensure_case_suffix "$CASENAME")"
-
-# ============================
-# OPTIMIZED PARSING FUNCTIONS
-# ============================
-
-# Use associative array for O(1) lookups (requires bash 4+)
+CASE_DIR="$([[ "$CASENAME" == *.case ]] && echo "$CASENAME" || echo "${CASENAME}.case")"
 declare -A FLOW_CONFIG
 
-# Optimized Flowfile reader - single pass with awk
 read_flowfile(){
   FLOW_CONFIG=()
-  local IFS=$'\n'
-  while IFS='=' read -r key val; do
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+    line="${line%%#*}"
+    [[ "$line" != *=* ]] && continue
+    key="${line%%=*}"; val="${line#*=}"
+    key="${key// /}"; val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
     [ -n "$key" ] && FLOW_CONFIG["$key"]="$val"
-  done < <(awk -F'=' '
-    /^[[:space:]]*#/ { next }
-    /^[[:space:]]*$/ { next }
-    {
-      gsub(/^[[:space:]]+|[[:space:]]+$|#.*$/, "", $0)
-      if (NF >= 2) {
-        key = $1; val = $2
-        for (i=3; i<=NF; i++) val = val "=" $i
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
-        if (key) print key "=" val
-      }
-    }
-  ' "$CONFIG")
+  done < "$CONFIG"
 }
 
-# Efficient sed script builder using printf
-build_sed_script(){
-  local sedfile="$1"
-  : > "$sedfile"  # Create empty file first
-
-  # Check if FLOW_CONFIG has any entries
-  if [ ${#FLOW_CONFIG[@]} -eq 0 ]; then
-    return 0
-  fi
-
-  {
+apply_substitutions(){
+  local dir="$1" processed=0
+  while IFS= read -r -d '' file; do
+    [ ! -s "$file" ] && continue
+    case "$(basename "$file")" in *.foam|*.stl|*.gz|*.tar|*.zip|*.png|*.jpg) continue ;; esac
+    grep -q '@[A-Za-z0-9_]*@' "$file" 2>/dev/null || continue
+    local content="" original=""
+    content=$(cat "$file" 2>/dev/null) || continue
+    original="$content"
     for key in "${!FLOW_CONFIG[@]}"; do
-      # Use bash parameter expansion for escaping (more portable)
-      local val="${FLOW_CONFIG[$key]}"
-      val="${val//\\/\\\\}"  # Escape backslashes
-      val="${val//&/\\&}"     # Escape ampersands
-      val="${val//\//\\/}"    # Escape forward slashes
-      printf 's/%%%%%s%%%%/%s/g\n' "$key" "$val"
+      content="${content//@${key}@/${FLOW_CONFIG[$key]}}"
     done
-  } >> "$sedfile"
+    [ "$content" != "$original" ] && echo "$content" > "$file" && ((processed++))
+  done < <(find "$dir" -type f ! -path '*/constant/polyMesh/*' -print0)
+  info "Modified $processed files"
 }
 
-# Streamlined placeholder finder
 find_placeholders(){
-  grep -Rho --exclude-dir='constant/polyMesh' \
-    --exclude='*.foam' --exclude='*.OpenFOAM' \
-    --exclude='*.stl' --exclude='*.STL' \
-    --exclude='*.gz' --exclude='*.tar' --exclude='*.zip' \
-    --exclude='*.png' --exclude='*.jpg' \
-    '%%[A-Za-z0-9_]\+%%' "$1" 2>/dev/null \
-    | sed 's/%%\([^%]*\)%%/\1/' | sort -u
+  grep -Rho --exclude-dir='constant/polyMesh' --exclude='*.foam' --exclude='*.stl' \
+    '@[A-Za-z0-9_]*@' "$1" 2>/dev/null | sed 's/@\([^@]*\)@/\1/' | sort -u
 }
 
-# Optimized validation with associative array lookup
 require_all_placeholders_defined(){
-  local dir="$1"
-  local -a missing=()  # Initialize as empty array
-  local token
-
+  local dir="$1" missing=()
   while IFS= read -r token; do
     [ -z "$token" ] && continue
+    token="${token// /}"
     [ -z "${FLOW_CONFIG[$token]:-}" ] && missing+=("$token")
   done < <(find_placeholders "$dir")
-
   if [ ${#missing[@]} -gt 0 ]; then
-    {
-      echo "Unresolved template variables:"
-      printf '  - %%%%s%%%%\n' "${missing[@]}"
-    } >&2
+    echo "Unresolved template variables:" >&2
+    printf '  - @%s@\n' "${missing[@]}" >&2
     die "Add values for the above keys to Flowfile."
   fi
 }
-
-# Optimized substitution with better error handling
-apply_substitutions() {
-  local dir="$1" sedfile="$2"
-  local errors=0  # Initialize without -i flag for compatibility
-
-  while IFS= read -r -d '' file; do
-    # Skip empty files (like pv.foam marker files)
-    [ ! -s "$file" ] && continue
-
-    # Skip binary files and specific OpenFOAM files that shouldn't be modified
-    case "$(basename "$file")" in
-      *.foam|*.OpenFOAM|*.stl|*.STL|*.gz|*.tar|*.zip|*.png|*.jpg) continue ;;
-    esac
-
-    if LC_ALL=C sed -f "$sedfile" "$file" > "${file}.flowtmp" 2>/dev/null; then
-      mv -f "${file}.flowtmp" "$file"
-    else
-      rm -f "${file}.flowtmp"
-      ((errors++))
-      echo "Warning: Failed to process $file" >&2
-    fi
-  done < <(find "$dir" -type f ! -path '*/constant/polyMesh/*' -print0)
-
-  [ $errors -gt 0 ] && die "Failed to apply substitutions to $errors file(s)"
-}
-
-# ============================
-# STAGE FUNCTIONS (UNCHANGED)
-# ============================
 
 stage_new(){
   [ -e "$CASE_DIR" ] && die "Case '$CASE_DIR' already exists."
@@ -160,25 +83,15 @@ stage_new(){
 stage_pre(){
   [ -d "$CASE_DIR" ] || die "Case '$CASE_DIR' not found. Run 'flow new $CASENAME' first."
   info "Pre-processing '$CASE_DIR'..."
-
-  FLOW_CONFIG=()  # Reset the associative array
+  FLOW_CONFIG=()
   read_flowfile
   require_all_placeholders_defined "$CASE_DIR"
-  local sedfile="$CASE_DIR/.flow_subst.sed"
-  build_sed_script "$sedfile"
-  apply_substitutions "$CASE_DIR" "$sedfile"
-  rm -f "$sedfile"
-
-  # make Allrun and Allmesh executables
-  chmod +x "$CASE_DIR/Allrun"
-  chmod +x "$CASE_DIR/Allmesh"
-
-  # Mesh build (OpenSCAD->STL + blockMesh + optional snappy)
+  apply_substitutions "$CASE_DIR"
+  chmod +x "$CASE_DIR"/{Allrun,Allmesh} 2>/dev/null || true
   if [ -x "$CASE_DIR/Allmesh" ]; then
     ( cd "$CASE_DIR" && ./Allmesh )
   else
-    echo "$CASE_DIR/Allmesh"
-    die "Allmesh not found in case. Check case.template."
+    die "Allmesh not found in case."
   fi
   info "Pre-processing complete."
 }
@@ -204,14 +117,10 @@ stage_post(){
   [ -z "$last" ] && last="$CASE_DIR/0"
   for ph in gas liquid solid; do
     local f="$last/alpha.$ph"
-    if [ -f "$f" ]; then
-      if grep -qE 'internalField[[:space:]]+uniform' "$f"; then
-        local val
-        val="$(awk '/internalField/{print $3}' "$f" | tr -d ';')"
-        echo "alpha.$ph (avg approx),$val" >> "$result"
-      else
-        echo "alpha.$ph (avg approx),N/A" >> "$result"
-      fi
+    if [ -f "$f" ] && grep -qE 'internalField[[:space:]]+uniform' "$f"; then
+      echo "alpha.$ph (avg approx),$(grep 'internalField' "$f" | sed 's/.*uniform[[:space:]]*//; s/;.*//')" >> "$result"
+    else
+      echo "alpha.$ph (avg approx),N/A" >> "$result"
     fi
   done
   echo "Output,$result" >> "$result"
@@ -224,5 +133,5 @@ case "${SUBCMD}" in
   run)  stage_run ;;
   post) stage_post ;;
   all)  stage_new; stage_pre; stage_run; stage_post ;;
-  *)    usage ;;
+  *)    echo "Unknown command: $SUBCMD"; exit 1 ;;
 esac

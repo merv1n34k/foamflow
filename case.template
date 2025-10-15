@@ -2,7 +2,7 @@
 #!/usr/bin/env bash
 # case.template - create a complete OpenFOAM case (gas-liquid-solid, Euler-Euler)
 # Defines: create_case <caseDir>
-# Leaves values as %%PLACEHOLDER%% to be substituted by `flow pre` from Flowfile
+# Leaves values as @PLACEHOLDER@ to be substituted by `flow pre` from Flowfile
 
 create_case() {
   local caseDir="$1"
@@ -34,16 +34,16 @@ FoamFile
     object      controlDict;
 }
 
-application     %%SOLVER%%;
+application     @SOLVER@;
 
 startFrom       startTime;
-startTime       %%START_TIME%%;
+startTime       @START_TIME@;
 stopAt          endTime;
-endTime         %%END_TIME%%;
-deltaT          %%DELTA_T%%;
+endTime         @END_TIME@;
+deltaT          @DELTA_T@;
 
 writeControl    runTime;
-writeInterval   %%WRITE_INTERVAL%%;
+writeInterval   @WRITE_INTERVAL@;
 purgeWrite      0;
 writeFormat     ascii;
 writePrecision  7;
@@ -274,18 +274,18 @@ scale 1.0;
 vertices
 (
     (0          0           0)
-    (%%LENGTH%% 0           0)
-    (%%LENGTH%% %%WIDTH%%   0)
-    (0          %%WIDTH%%   0)
-    (0          0           %%HEIGHT%%)
-    (%%LENGTH%% 0           %%HEIGHT%%)
-    (%%LENGTH%% %%WIDTH%%   %%HEIGHT%%)
-    (0          %%WIDTH%%   %%HEIGHT%%)
+    (@LENGTH@ 0           0)
+    (@LENGTH@ @WIDTH@   0)
+    (0          @WIDTH@   0)
+    (0          0           @HEIGHT@)
+    (@LENGTH@ 0           @HEIGHT@)
+    (@LENGTH@ @WIDTH@   @HEIGHT@)
+    (0          @WIDTH@   @HEIGHT@)
 );
 
 blocks
 (
-    hex (0 1 2 3 4 5 6 7) (%%NX%% %%NY%% %%NZ%%) simpleGrading (1 1 1)
+    hex (0 1 2 3 4 5 6 7) (@NX@ @NY@ @NZ@) simpleGrading (1 1 1)
 );
 
 edges
@@ -332,7 +332,7 @@ FoamFile
 }
 
 dimensions      [0 1 -2 0 0 0 0];
-value           ( %%G_X%% %%G_Y%% %%G_Z%% );
+value           ( @G_X@ @G_Y@ @G_Z@ );
 
 // ************************************************************************* //
 EOF
@@ -357,7 +357,7 @@ phases
         diameterModel   constant;
         constantCoeffs
         {
-            d           %%GAS_DIAMETER%%;
+            d           @GAS_DIAMETER@;
         }
         residualAlpha   1e-08;
     }
@@ -366,7 +366,7 @@ phases
         diameterModel   constant;
         constantCoeffs
         {
-            d           %%LIQUID_DIAMETER%%;
+            d           @LIQUID_DIAMETER@;
         }
         residualAlpha   1e-08;
     }
@@ -375,7 +375,7 @@ phases
         diameterModel   constant;
         constantCoeffs
         {
-            d           %%SOLID_DIAMETER%%;
+            d           @SOLID_DIAMETER@;
         }
         residualAlpha   1e-08;
     }
@@ -383,9 +383,9 @@ phases
 
 sigma
 (
-    ( gas and liquid )  %%SIGMA_GAS_LIQUID%%
-    ( gas and solid  )  %%SIGMA_GAS_SOLID%%
-    ( liquid and solid) %%SIGMA_LIQUID_SOLID%%
+    ( gas and liquid )  @SIGMA_GAS_LIQUID@
+    ( gas and solid  )  @SIGMA_GAS_SOLID@
+    ( liquid and solid) @SIGMA_LIQUID_SOLID@
 );
 
 drag
@@ -457,7 +457,7 @@ phases
             }
             transport
             {
-                mu          %%GAS_MU%%;
+                mu          @GAS_MU@;
                 Pr          0.7;
             }
         }
@@ -485,7 +485,7 @@ phases
             equationOfState
             {
                 R           3000;
-                rho0        %%LIQUID_RHO%%;
+                rho0        @LIQUID_RHO@;
             }
             thermodynamics
             {
@@ -494,7 +494,7 @@ phases
             }
             transport
             {
-                mu          %%LIQUID_MU%%;
+                mu          @LIQUID_MU@;
                 Pr          2.289;
             }
         }
@@ -522,7 +522,7 @@ phases
             equationOfState
             {
                 R           3000;
-                rho0        %%SOLID_RHO%%;
+                rho0        @SOLID_RHO@;
             }
             thermodynamics
             {
@@ -531,7 +531,7 @@ phases
             }
             transport
             {
-                mu          %%SOLID_MU%%;
+                mu          @SOLID_MU@;
                 Pr          1.0;
             }
         }
@@ -586,7 +586,7 @@ FoamFile
 }
 
 dimensions      [0 0 0 0 0 0 0];
-internalField   uniform %%INITIAL_ALPHA_GAS%%;
+internalField   uniform @INITIAL_ALPHA_GAS@;
 
 boundaryField
 {
@@ -621,7 +621,7 @@ FoamFile
 }
 
 dimensions      [0 0 0 0 0 0 0];
-internalField   uniform %%INITIAL_ALPHA_LIQUID%%;
+internalField   uniform @INITIAL_ALPHA_LIQUID@;
 
 boundaryField
 {
@@ -656,7 +656,7 @@ FoamFile
 }
 
 dimensions      [0 0 0 0 0 0 0];
-internalField   uniform %%INITIAL_ALPHA_SOLID%%;
+internalField   uniform @INITIAL_ALPHA_SOLID@;
 
 boundaryField
 {
@@ -698,7 +698,7 @@ boundaryField
     inlet
     {
         type            fixedValue;
-        value           uniform %%GAS_INLET_VEL%%;
+        value           uniform @GAS_INLET_VEL@;
     }
     outlet
     {
@@ -802,14 +802,14 @@ FoamFile
 }
 
 dimensions      [0 2 -1 0 0 0 0];
-internalField   uniform %%NUT_INIT%%;
+internalField   uniform @NUT_INIT@;
 
 boundaryField
 {
     inlet
     {
         type            calculated;
-        value           uniform %%NUT_INIT%%;
+        value           uniform @NUT_INIT@;
     }
     outlet
     {
@@ -818,7 +818,7 @@ boundaryField
     walls
     {
         type            nutkWallFunction;
-        value           uniform %%NUT_INIT%%;
+        value           uniform @NUT_INIT@;
     }
 }
 
@@ -914,14 +914,14 @@ FoamFile
 }
 
 dimensions      [0 2 -2 0 0 0 0];
-internalField   uniform %%K_INIT%%;
+internalField   uniform @K_INIT@;
 
 boundaryField
 {
     inlet
     {
         type            fixedValue;
-        value           uniform %%K_INIT%%;
+        value           uniform @K_INIT@;
     }
     outlet
     {
@@ -930,7 +930,7 @@ boundaryField
     walls
     {
         type            kqRWallFunction;
-        value           uniform %%K_INIT%%;
+        value           uniform @K_INIT@;
     }
 }
 
@@ -951,14 +951,14 @@ FoamFile
 }
 
 dimensions      [0 0 -1 0 0 0 0];
-internalField   uniform %%OMEGA_INIT%%;
+internalField   uniform @OMEGA_INIT@;
 
 boundaryField
 {
     inlet
     {
         type            fixedValue;
-        value           uniform %%OMEGA_INIT%%;
+        value           uniform @OMEGA_INIT@;
     }
     outlet
     {
@@ -967,7 +967,7 @@ boundaryField
     walls
     {
         type            omegaWallFunction;
-        value           uniform %%OMEGA_INIT%%;
+        value           uniform @OMEGA_INIT@;
     }
 }
 
@@ -1030,16 +1030,16 @@ geometry
     {
         type searchableBox;
         min (0 0 0);
-        max (%%LENGTH%% %%WIDTH%% %%INLET_BOX_Z%%);
+        max (@LENGTH@ @WIDTH@ @INLET_BOX_Z@);
     }
 }
 
 castellatedMeshControls
 {
-    maxLocalCells           %%MAX_LOCAL_CELLS%%;
-    maxGlobalCells          %%MAX_GLOBAL_CELLS%%;
-    minRefinementCells      %%MIN_REFINEMENT_CELLS%%;
-    nCellsBetweenLevels     %%N_CELLS_BETWEEN_LEVELS%%;
+    maxLocalCells           @MAX_LOCAL_CELLS@;
+    maxGlobalCells          @MAX_GLOBAL_CELLS@;
+    minRefinementCells      @MIN_REFINEMENT_CELLS@;
+    nCellsBetweenLevels     @N_CELLS_BETWEEN_LEVELS@;
 
     features                ();     // no explicit feature edges required
 
@@ -1047,7 +1047,7 @@ castellatedMeshControls
     {
         pbr
         {
-            level (%%SURFACE_LEVEL_MIN%% %%SURFACE_LEVEL_MAX%%);
+            level (@SURFACE_LEVEL_MIN@ @SURFACE_LEVEL_MAX@);
 
             // Optional: create zones (handy if you want to address faces later)
             faceZone        pbrFaces;
@@ -1067,14 +1067,14 @@ castellatedMeshControls
         {
             mode inside;
             // very large distance selects the whole box
-            levels ((1e15 %%INLET_BOX_LEVEL%%));
+            levels ((1e15 @INLET_BOX_LEVEL@));
         }
     }
 
-    resolveFeatureAngle     %%RESOLVE_FEATURE_ANGLE%%;
+    resolveFeatureAngle     @RESOLVE_FEATURE_ANGLE@;
 
     // MUST be inside the STL fluid volume
-    locationInMesh (%%LIM_X%% %%LIM_Y%% %%LIM_Z%%);
+    locationInMesh (@LIM_X@ @LIM_Y@ @LIM_Z@);
 
     allowFreeStandingZoneFaces true;
 }
@@ -1126,17 +1126,17 @@ EOF
 set -euo pipefail
 cd "${0%/*}" || exit 1
 
-LENGTH="%%LENGTH%%"
-WIDTH="%%WIDTH%%"
-HEIGHT="%%HEIGHT%%"
-NX="%%NX%%"
-NY="%%NY%%"
-NZ="%%NZ%%"
+LENGTH="@LENGTH@"
+WIDTH="@WIDTH@"
+HEIGHT="@HEIGHT@"
+NX="@NX@"
+NY="@NY@"
+NZ="@NZ@"
 
-NB="%%NB%%"
-BAFFLE_RADIUS="%%BAFFLE_RADIUS%%"
+NB="@NB@"
+BAFFLE_RADIUS="@BAFFLE_RADIUS@"
 
-PBR_SCAD="%%PBR_SCAD%%"
+PBR_SCAD="@PBR_SCAD@"
 
 TRISURF_DIR="constant/triSurface"
 TRISURF_FILE="${TRISURF_DIR}/pbr_fluid.stl"
@@ -1199,43 +1199,43 @@ phases
 (
     gas
     {
-        rho             %%GAS_RHO%%;
-        nu              %%GAS_NU%%;
+        rho             @GAS_RHO@;
+        nu              @GAS_NU@;
         kappa           0;
         Cp              0;
 
         diameterModel   constant;
         constantCoeffs
         {
-            d           %%GAS_DIAMETER%%;
+            d           @GAS_DIAMETER@;
         }
     }
 
     liquid
     {
-        rho             %%LIQUID_RHO%%;
-        nu              %%LIQUID_NU%%;
+        rho             @LIQUID_RHO@;
+        nu              @LIQUID_NU@;
         kappa           0;
         Cp              0;
 
         diameterModel   constant;
         constantCoeffs
         {
-            d           %%LIQUID_DIAMETER%%;
+            d           @LIQUID_DIAMETER@;
         }
     }
 
     solid
     {
-        rho             %%SOLID_RHO%%;
-        nu              %%SOLID_NU%%;
+        rho             @SOLID_RHO@;
+        nu              @SOLID_NU@;
         kappa           0;
         Cp              0;
 
         diameterModel   constant;
         constantCoeffs
         {
-            d           %%SOLID_DIAMETER%%;
+            d           @SOLID_DIAMETER@;
         }
     }
 );
