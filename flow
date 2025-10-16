@@ -11,12 +11,26 @@ info(){ echo "[flow] $*"; }
 [ -f "$CONFIG" ] || die "Flowfile not found."
 [ -f "$TEMPLATE" ] || die "case.template not found."
 
+OVERRIDES=()
+ARGS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -D) [ $# -lt 2 ] && die "-D requires argument"
+        OVERRIDES+=("$2"); shift 2 ;;
+    -D*) OVERRIDES+=("${1#-D}"); shift ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+
+set -- "${ARGS[@]:-}"
+
 if [ $# -eq 1 ]; then
     SUBCMD="all"; CASENAME="${1%/}"
 elif [ $# -eq 2 ]; then
     SUBCMD="$1"; CASENAME="${2%/}"
 else
-    echo "Usage: $(basename "$0") [new|pre|run|post] CASE_NAME"; exit 1
+    echo "Usage: $(basename "$0") [-D KEY=VALUE ...] [new|pre|run|post] CASE_NAME"; exit 1
 fi
 
 CASE_DIR="$([[ "$CASENAME" == *.case ]] && echo "$CASENAME" || echo "${CASENAME}.case")"
@@ -33,6 +47,13 @@ read_flowfile(){
     key="${key// /}"; val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
     [ -n "$key" ] && FLOW_CONFIG["$key"]="$val"
   done < "$CONFIG"
+
+  for override in "${OVERRIDES[@]}"; do
+    [[ "$override" != *=* ]] && continue
+    key="${override%%=*}"; val="${override#*=}"
+    key="${key// /}"
+    [ -n "${FLOW_CONFIG[$key]:-}" ] && FLOW_CONFIG["$key"]="$val"
+  done
 }
 
 apply_substitutions(){
@@ -85,6 +106,7 @@ stage_pre(){
   info "Pre-processing '$CASE_DIR'..."
   FLOW_CONFIG=()
   read_flowfile
+  [ ${#OVERRIDES[@]} -gt 0 ] && info "Applied ${#OVERRIDES[@]} overrides"
   require_all_placeholders_defined "$CASE_DIR"
   apply_substitutions "$CASE_DIR"
   chmod +x "$CASE_DIR"/{Allrun,Allmesh} 2>/dev/null || true

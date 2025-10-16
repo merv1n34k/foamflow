@@ -296,18 +296,18 @@ patches
 (
     patch inlet
     (
-        (0 4 7 3)          // bottom face
+        (0 3 2 1)          // bottom face
     )
     patch outlet
     (
-        (1 2 6 5)          // top face
+        (4 5 6 7)          // top face
     )
     wall walls
     (
-        (0 1 5 4)          // side 1
-        (3 7 6 2)          // side 2
-        (0 3 2 1)          // narrow face 1
-        (4 5 6 7)          // narrow face 2
+        (0 4 7 3)  // left face
+        (1 2 6 5)  // right face
+        (0 1 5 4)  // front face
+        (3 7 6 2)  // back face
     )
 );
 
@@ -333,85 +333,6 @@ FoamFile
 
 dimensions      [0 1 -2 0 0 0 0];
 value           ( @G_X@ @G_Y@ @G_Z@ );
-
-// ************************************************************************* //
-EOF
-
-  # constant/phaseProperties
-  cat > "$caseDir/constant/phaseProperties" <<EOF
-$HEADER
-
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "constant";
-    object      phaseProperties;
-}
-
-phases
-(
-    gas
-    {
-        diameterModel   constant;
-        constantCoeffs
-        {
-            d           @GAS_DIAMETER@;
-        }
-        residualAlpha   1e-08;
-    }
-    liquid
-    {
-        diameterModel   constant;
-        constantCoeffs
-        {
-            d           @LIQUID_DIAMETER@;
-        }
-        residualAlpha   1e-08;
-    }
-    solid
-    {
-        diameterModel   constant;
-        constantCoeffs
-        {
-            d           @SOLID_DIAMETER@;
-        }
-        residualAlpha   1e-08;
-    }
-);
-
-sigma
-(
-    ( gas and liquid )  @SIGMA_GAS_LIQUID@
-    ( gas and solid  )  @SIGMA_GAS_SOLID@
-    ( liquid and solid) @SIGMA_LIQUID_SOLID@
-);
-
-drag
-(
-    // e.g., (gas in liquid) SchillerNaumannCoeffs {  }
-);
-
-lift
-(
-);
-
-wallLubrication
-(
-);
-
-turbulentDispersion
-(
-);
-
-virtualMass
-(
-);
-
-heatTransfer
-(
-);
 
 // ************************************************************************* //
 EOF
@@ -1101,18 +1022,18 @@ addLayersControls
 
 meshQualityControls
 {
-    maxNonOrtho             65;
-    maxBoundarySkewness     20;
-    maxInternalSkewness     4;
+    maxNonOrtho             40;
+    maxBoundarySkewness     10;
+    maxInternalSkewness     2;
     maxConcave              80;
-    minVol                  1e-13;
-    minTetQuality           1e-9;
-    minArea                 1e-13;
-    minTwist                0.02;
+    minVol                  1e-15;
+    minTetQuality           1e-12;
+    minArea                 1e-15;
+    minTwist                0.05;
     minDeterminant          0.001;
-    minFaceWeight           0.02;
+    minFaceWeight           0.05;
     minVolRatio             0.01;
-    minTriangleTwist        0.02;
+    minTriangleTwist        -1;
     nSmoothScale            4;
     errorReduction          0.75;
 }
@@ -1183,7 +1104,7 @@ EOF
   cat > "$caseDir/pv.foam" <<EOF
 EOF
 
-  # constant/transportProperties (v2506 expects this dictionary to exist)
+  # constant/transportProperties
   cat > "$caseDir/constant/transportProperties" <<EOF
 $HEADER
 

@@ -19,11 +19,11 @@ BAFFLE_RADIUS=0.01  # m (10 mm radius => 20 mm diameter)
 PBR_SCAD=../pbr.scad
 
 # ============================
-# Physics / phases (unchanged from previous Flowfile)
+# Physics / phases
 # ============================
 G_X=0
-G_Y=-9.81
-G_Z=0
+G_Y=0
+G_Z=-9.81
 
 GAS_RHO=1.15
 GAS_NU=1.6e-5
@@ -32,7 +32,7 @@ LIQUID_NU=8.0e-7         # (water ~30°C; mu≈8.0e-4 / rho≈998.2)
 
 SOLID_RHO=1050
 SOLID_NU=1.0e-6          # small effective kinematic viscosity
-GAS_DIAMETER=5e-4
+GAS_DIAMETER=5e-3
 LIQUID_DIAMETER=1e-3
 SOLID_DIAMETER=2e-6
 
@@ -48,10 +48,10 @@ LIQUID_RHO=998.2
 SOLID_RHO=1050
 
 INITIAL_ALPHA_GAS=0.000
-INITIAL_ALPHA_LIQUID=0.999
-INITIAL_ALPHA_SOLID=0.001
+INITIAL_ALPHA_LIQUID=0.95
+INITIAL_ALPHA_SOLID=0.05
 
-GAS_INLET_VEL=(0 0 0.5)
+GAS_INLET_VEL=(0 0 0.25)
 
 K_INIT=1e-6
 OMEGA_INIT=10.0
@@ -61,15 +61,15 @@ OMEGA_INIT=10.0
 # ============================
 SOLVER=multiphaseEulerFoam
 START_TIME=0
-END_TIME=60
+END_TIME=10
 DELTA_T=1e-4
-WRITE_INTERVAL=0.5
+WRITE_INTERVAL=0.05
 
 # ============================
 # snappyHexMesh controls
 # ============================
-SURFACE_LEVEL_MIN=1        # base surface refinement
-SURFACE_LEVEL_MAX=2        # one extra level near cylinders (≈2.5 mm)
+SURFACE_LEVEL_MIN=2        # base surface refinement
+SURFACE_LEVEL_MAX=3        # one extra level near cylinders (≈2.5 mm)
 INLET_BOX_LEVEL=2          # refine inlet jet region
 
 # Height of the inlet refinement box (from bottom), meters
@@ -88,5 +88,5 @@ MIN_REFINEMENT_CELLS=0
 RESOLVE_FEATURE_ANGLE=150
 
 # Turbulence (nut initial guess)
-NUT_INIT=1e-5
+NUT_INIT=1e-6
 
