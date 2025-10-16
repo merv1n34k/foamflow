@@ -113,3 +113,9 @@ MAX_GLOBAL_CELLS=2000000
 N_CELLS_BETWEEN_LEVELS=3
 MIN_REFINEMENT_CELLS=0
 RESOLVE_FEATURE_ANGLE=150
+
+# ============================
+# Parallel Processing
+# ============================
+# cores
+NCORES=16

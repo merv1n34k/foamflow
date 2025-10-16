@@ -1363,14 +1363,30 @@ if [ ! -d "constant/polyMesh" ]; then
   exit 1
 fi
 
-# Check if fields are initialized
-if ! grep -q "nonuniform" 0/p_rgh 2>/dev/null; then
-  echo "Warning: Pressure field appears uniform - may not have run setFields"
-  echo "Consider running: setFields"
-fi
+echo "[Allrun] @SOLVER@"
+# Read number of cores from decomposeParDict
+NCORES=@NCORES@
 
-echo "[Allrun] multiphaseEulerFoam"
-multiphaseEulerFoam || { echo "Solver failed"; exit 1; }
+if [ "$NCORES" -gt 1 ]; then
+  echo "Running parallel on $NCORES cores..."
+
+  # Decompose the domain
+  if [ ! -d "processor0" ]; then
+    echo "Decomposing mesh..."
+    decomposePar || { echo "decomposePar failed"; exit 1; }
+  fi
+
+  # Run in parallel
+  echo "Starting parallel run..."
+  mpirun -np $NCORES @SOLVER@ -parallel || { echo "Solver failed"; exit 1; }
+
+  # Reconstruct results
+  echo "Reconstructing results..."
+  reconstructPar -latestTime || echo "Warning: reconstruct failed"
+else
+  echo "Running serial..."
+  @SOLVER@ || { echo "Solver failed"; exit 1; }
+fi
 EOF
   chmod +x "$caseDir/Allrun"
 
@@ -1563,6 +1579,25 @@ EOF
 
   # pv.foam
   cat > "$caseDir/pv.foam" <<EOF
+EOF
+
+# system/decomposeParDict
+cat > "$caseDir/system/decomposeParDict" <<EOF
+$HEADER
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      decomposeParDict;
+}
+
+numberOfSubdomains @NCORES@;
+
+method          scotch;  // Best general-purpose decomposition
+
+// ************************************************************************* //
 EOF
 }
 
