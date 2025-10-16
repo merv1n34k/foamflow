@@ -614,9 +614,9 @@ phases
 
 sigmas
 (
-    (gas liquid) @SIGMA_GAS_LIQUID@;
-    (gas solid)  @SIGMA_GAS_SOLID@;
-    (liquid solid) @SIGMA_LIQUID_SOLID@;
+    (gas liquid) @SIGMA_GAS_LIQUID@
+    (gas solid)  @SIGMA_GAS_SOLID@
+    (liquid solid) @SIGMA_LIQUID_SOLID@
 );
 
 interfaceCompression
@@ -626,9 +626,9 @@ interfaceCompression
 
 virtualMass
 (
-    (gas liquid) @VM_GAS_LIQUID@;
-    (gas solid)  @VM_GAS_SOLID@;
-    (liquid solid) @VM_LIQUID_SOLID@;
+    (gas liquid) @VM_GAS_LIQUID@
+    (gas solid)  @VM_GAS_SOLID@
+    (liquid solid) @VM_LIQUID_SOLID@
 );
 
 drag
@@ -713,7 +713,7 @@ phases
 
 sigmas
 (
-    (gas liquid) @SIGMA_GAS_LIQUID@;
+    (gas liquid) @SIGMA_GAS_LIQUID@
 );
 
 interfaceCompression
@@ -723,7 +723,7 @@ interfaceCompression
 
 virtualMass
 (
-    (gas liquid) @VM_GAS_LIQUID@;
+    (gas liquid) @VM_GAS_LIQUID@
 );
 
 drag
@@ -1220,7 +1220,7 @@ defaultFieldValues
 
 regions
 (
-    // Main liquid region with biomass (70% of reactor height)
+    // Main liquid region (70% of reactor height)
     boxToCell
     {
         box (0 0 0) (@LENGTH@ @WIDTH@ @LIQUID_LEVEL@);
@@ -1229,6 +1229,8 @@ regions
             volScalarFieldValue alpha.gas @HOLDUP_INITIAL@
             volScalarFieldValue alpha.liquid @LIQUID_FRAC_MAIN@
             volScalarFieldValue alpha.solid @INITIAL_ALPHA_SOLID@
+            // Average hydrostatic pressure for this region
+            volScalarFieldValue p_rgh @P_RGH_LIQUID@
         );
     }
 
@@ -1245,26 +1247,24 @@ regions
         );
     }
 
-    // Optional settled biomass layer (bottom 1cm) - only if settling enabled
-    // Uncomment if modeling settling:
-    // boxToCell
-    // {
-    //     box (0 0 0) (@LENGTH@ @WIDTH@ 0.01);
-    //     fieldValues
-    //     (
-    //         volScalarFieldValue alpha.solid @SETTLED_SOLID@
-    //         volScalarFieldValue alpha.liquid @SETTLED_LIQUID@
-    //     );
-    // }
-
-    // Hydrostatic pressure initialization
-    // Using linear interpolation based on liquid height
+    // Bottom pressure gradient layers (approximates hydrostatic)
+    // Layer 1: Bottom 25%
     boxToCell
     {
-        box (0 0 0) (@LENGTH@ @WIDTH@ @LIQUID_LEVEL@);
+        box (0 0 0) (@LENGTH@ @WIDTH@ @BOTTOM_LAYER@);
         fieldValues
         (
-            volScalarFieldValue p_rgh #calc "@LIQUID_RHO@ * mag(@G_Z@) * (@LIQUID_LEVEL@ - pos().z())"
+            volScalarFieldValue p_rgh @P_RGH_BOTTOM@
+        );
+    }
+
+    // Layer 2: Middle 25-50%
+    boxToCell
+    {
+        box (0 0 @BOTTOM_LAYER@) (@LENGTH@ @WIDTH@ @MIDDLE_LAYER@);
+        fieldValues
+        (
+            volScalarFieldValue p_rgh @P_RGH_MIDDLE@
         );
     }
 );
@@ -1302,6 +1302,8 @@ regions
         (
             volScalarFieldValue alpha.gas @HOLDUP_INITIAL@
             volScalarFieldValue alpha.liquid @LIQUID_FRAC_NOPHASE@
+            // Average hydrostatic pressure for this region
+            volScalarFieldValue p_rgh @P_RGH_LIQUID@
         );
     }
 
@@ -1317,13 +1319,24 @@ regions
         );
     }
 
-    // Hydrostatic pressure initialization
+    // Bottom pressure gradient layers (approximates hydrostatic)
+    // Layer 1: Bottom 25%
     boxToCell
     {
-        box (0 0 0) (@LENGTH@ @WIDTH@ @LIQUID_LEVEL@);
+        box (0 0 0) (@LENGTH@ @WIDTH@ @BOTTOM_LAYER@);
         fieldValues
         (
-            volScalarFieldValue p_rgh #calc "@LIQUID_RHO@ * mag(@G_Z@) * (@LIQUID_LEVEL@ - pos().z())"
+            volScalarFieldValue p_rgh @P_RGH_BOTTOM@
+        );
+    }
+
+    // Layer 2: Middle 25-50%
+    boxToCell
+    {
+        box (0 0 @BOTTOM_LAYER@) (@LENGTH@ @WIDTH@ @MIDDLE_LAYER@);
+        fieldValues
+        (
+            volScalarFieldValue p_rgh @P_RGH_MIDDLE@
         );
     }
 );

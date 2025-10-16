@@ -1,89 +1,91 @@
 # ============================
-# Global settings
+# Configuration
 # ============================
-USE_SOLID=1
+# phases
+USESOLID=1
 
-# ============================
-# Geometry & base mesh
-# ============================
-LENGTH=0.20         # m (X)
-WIDTH=0.10          # m (Y depth)
-HEIGHT=0.50         # m (Z height)
+# geometry
+LENGTH=0.20
+WIDTH=0.10
+HEIGHT=0.30
 
-NX=40               # -> 0.20 / 0.005 = 40 cells (~5 mm)
-NY=20               # -> 0.10 / 0.005 = 20 cells
-NZ=100              # -> 0.50 / 0.005 = 100 cells
+# mesh
+NX=40
+NY=20
+NZ=60
 
-# ============================
-# Baffles (0=flat panel; 1,3,5 as specified)
-# ============================
-NB=0                # 0/1/3/5 (others supported)
-BAFFLE_RADIUS=0.01  # m (10 mm radius => 20 mm diameter)
-
-# OpenSCAD .scad source (absolute or relative path)
+# baffles
+NB=0
+BAFFLE_RADIUS=0.01
 PBR_SCAD=../pbr.scad
 
-# ============================
-# Physics / phases
-# ============================
+# gravity
 G_X=0
 G_Y=0
 G_Z=-9.81
 
+# ============================
+# Phase Properties
+# ============================
+# gas
+GAS_DIAMETER=5e-3
 GAS_RHO=1.15
+GAS_MU=1.8e-5
 GAS_NU=1.6e-5
 
-LIQUID_NU=8.0e-7         # (water ~30°C; mu≈8.0e-4 / rho≈998.2)
-
-SOLID_RHO=1050
-SOLID_NU=1.0e-6          # small effective kinematic viscosity
-GAS_DIAMETER=5e-3
+# liquid
 LIQUID_DIAMETER=1e-3
-SOLID_DIAMETER=2e-6
+LIQUID_RHO=998.2
+LIQUID_MU=8.0e-4
+LIQUID_NU=8.0e-7
 
-# surface tension
+# solid
+SOLID_DIAMETER=2e-5
+SOLID_RHO=1050
+SOLID_MU=1.0e-3
+SOLID_NU=1.0e-6
+
+# interfaces
 SIGMA_GAS_LIQUID=0.072
 SIGMA_GAS_SOLID=0.000
 SIGMA_LIQUID_SOLID=0.000
-
-# virtual mass
 VM_GAS_LIQUID=0.5
 VM_GAS_SOLID=0
 VM_LIQUID_SOLID=0
 
-GAS_MU=1.8e-5
-LIQUID_MU=8.0e-4
-SOLID_MU=1.0e-3
-
-LIQUID_RHO=998.2
-SOLID_RHO=1050
-
+# ============================
+# Initial Conditions
+# ============================
+# volume fractions
 INITIAL_ALPHA_GAS=0.000
 INITIAL_ALPHA_LIQUID=0.995
 INITIAL_ALPHA_SOLID=0.005
 
-GAS_INLET_VEL=(0 0 0.25)
-
-K_INIT=1e-6
-OMEGA_INIT=10.0
-
-LIQUID_LEVEL=0.21          # 70% of 0.30m HEIGHT
-
-# Initial gas holdup in liquid region (typical 1-5%)
-HOLDUP_INITIAL=0.02        # 2% gas holdup
-
-# Liquid fractions (calculated based on other phases)
-# For 3-phase: liquid = 1 - gas - solid
-# For 2-phase: liquid = 1 - gas
-LIQUID_FRAC_MAIN=0.96      # 3-phase: 1 - 0.02(gas) - 0.02(solid)
-LIQUID_FRAC_NOPHASE=0.98   # 2-phase: 1 - 0.02(gas)
-
-# Optional settled layer (if modeling settling)
-SETTLED_SOLID=0.10         # 10% solids in settled layer
+# liquid level setup
+LIQUID_LEVEL=0.21
+HOLDUP_INITIAL=0.02
+LIQUID_FRAC_MAIN=0.96
+LIQUID_FRAC_NOPHASE=0.98
+SETTLED_SOLID=0.10
 SETTLED_LIQUID=0.90
 
+# pressure initialization
+P_RGH_LIQUID=1028
+P_RGH_BOTTOM=1687
+P_RGH_MIDDLE=950
+BOTTOM_LAYER=0.075
+MIDDLE_LAYER=0.15
+
+# boundary conditions
+GAS_INLET_VEL=(0 0 0.1)
+
+# turbulence
+K_INIT=1e-6
+OMEGA_INIT=10.0
+NUT_INIT=1e-6
+
 # ============================
-# Time / solver
+# Solver Control
 # ============================
 SOLVER=multiphaseEulerFoam
 START_TIME=0
@@ -92,27 +94,22 @@ DELTA_T=1e-4
 WRITE_INTERVAL=0.05
 
 # ============================
-# snappyHexMesh controls
+# Mesh Refinement
 # ============================
-SURFACE_LEVEL_MIN=2        # base surface refinement
-SURFACE_LEVEL_MAX=3        # one extra level near cylinders (≈2.5 mm)
-INLET_BOX_LEVEL=2          # refine inlet jet region
-
-# Height of the inlet refinement box (from bottom), meters
+# snappyHexMesh levels
+SURFACE_LEVEL_MIN=2
+SURFACE_LEVEL_MAX=3
+INLET_BOX_LEVEL=2
 INLET_BOX_Z=0.05
 
-# Location inside fluid
-LIM_X=0.01
-LIM_Y=0.01
-LIM_Z=0.05
+# location in mesh
+LIM_X=0.005
+LIM_Y=0.05
+LIM_Z=0.005
 
-# Castellated controls
+# quality controls
 MAX_LOCAL_CELLS=100000
 MAX_GLOBAL_CELLS=2000000
 N_CELLS_BETWEEN_LEVELS=3
 MIN_REFINEMENT_CELLS=0
 RESOLVE_FEATURE_ANGLE=150
-
-# Turbulence (nut initial guess)
-NUT_INIT=1e-6
-
