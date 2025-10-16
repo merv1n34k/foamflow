@@ -7,6 +7,10 @@
 create_case() {
   local caseDir="$1"
 
+  local USE_SOLID="${USE_SOLID:-1}"
+
+  info "Configuration: USE_SOLID=$USE_SOLID"
+
   # OpenFOAM dictionary header (v2506) to prepend to relevant files
   read -r -d '' HEADER <<'HED'
 /*--------------------------------*- C++ -*----------------------------------*\
@@ -228,9 +232,7 @@ PIMPLE
 
     residualControl
     {
-        U.gas     { tolerance 1e-5; relTol 0;    }
-        U.liquid  { tolerance 1e-5; relTol 0;    }
-        U.solid   { tolerance 1e-5; relTol 0;    }
+        "U.*"     { tolerance 1e-5; relTol 0;    }
 
         p_rgh     { tolerance 1e-5; relTol 0.01; }
 
@@ -338,7 +340,8 @@ value           ( @G_X@ @G_Y@ @G_Z@ );
 EOF
 
   # constant/thermophysicalProperties
-  cat > "$caseDir/constant/thermophysicalProperties" <<EOF
+  if [ "$USE_SOLID" = "1" ]; then
+    cat > "$caseDir/constant/thermophysicalProperties" <<EOF
 $HEADER
 
 FoamFile
@@ -461,6 +464,299 @@ phases
 
 // ************************************************************************* //
 EOF
+  else
+    cat > "$caseDir/constant/thermophysicalProperties" <<EOF
+$HEADER
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      thermophysicalProperties;
+}
+
+phases
+(
+    gas
+    {
+        thermoType
+        {
+            type            heRhoThermo;
+            mixture         pureMixture;
+            transport       const;
+            thermo          hConst;
+            equationOfState perfectGas;
+            specie          specie;
+            energy          sensibleInternalEnergy;
+        }
+
+        mixture
+        {
+            specie
+            {
+                molWeight   28.9;
+            }
+            thermodynamics
+            {
+                Cp          1005;
+                Hf          0;
+            }
+            transport
+            {
+                mu          @GAS_MU@;
+                Pr          0.7;
+            }
+        }
+    }
+
+    liquid
+    {
+        thermoType
+        {
+            type            heRhoThermo;
+            mixture         pureMixture;
+            transport       const;
+            thermo          eConst;
+            equationOfState perfectFluid;
+            specie          specie;
+            energy          sensibleInternalEnergy;
+        }
+
+        mixture
+        {
+            specie
+            {
+                molWeight   18;
+            }
+            equationOfState
+            {
+                R           3000;
+                rho0        @LIQUID_RHO@;
+            }
+            thermodynamics
+            {
+                Cv          4182;
+                Hf          0;
+            }
+            transport
+            {
+                mu          @LIQUID_MU@;
+                Pr          2.289;
+            }
+        }
+    }
+);
+
+// ************************************************************************* //
+EOF
+  fi
+
+  # constant/transportProperties
+  if [ "$USE_SOLID" = "1" ]; then
+    cat > "$caseDir/constant/transportProperties" <<EOF
+$HEADER
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+
+phases
+(
+    gas
+    {
+        rho             @GAS_RHO@;
+        nu              @GAS_NU@;
+        kappa           0;
+        Cp              0;
+
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           @GAS_DIAMETER@;
+        }
+    }
+
+    liquid
+    {
+        rho             @LIQUID_RHO@;
+        nu              @LIQUID_NU@;
+        kappa           0;
+        Cp              0;
+
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           @LIQUID_DIAMETER@;
+        }
+    }
+
+    solid
+    {
+        rho             @SOLID_RHO@;
+        nu              @SOLID_NU@;
+        kappa           0;
+        Cp              0;
+
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           @SOLID_DIAMETER@;
+        }
+    }
+);
+
+
+sigmas
+(
+    (gas liquid) @SIGMA_GAS_LIQUID@;
+    (gas solid)  @SIGMA_GAS_SOLID@;
+    (liquid solid) @SIGMA_LIQUID_SOLID@;
+);
+
+interfaceCompression
+(
+    // Optional interface compression per pair, leave empty to use fvSchemes/method
+);
+
+virtualMass
+(
+    (gas liquid) @VM_GAS_LIQUID@;
+    (gas solid)  @VM_GAS_SOLID@;
+    (liquid solid) @VM_LIQUID_SOLID@;
+);
+
+drag
+(
+    (gas liquid)
+    {
+        type blended;
+        gas
+        {
+            type SchillerNaumann;
+            residualPhaseFraction 0;
+            residualSlip 0;
+        }
+        liquid
+        {
+            type SchillerNaumann;
+            residualPhaseFraction 0;
+            residualSlip 0;
+        }
+        residualPhaseFraction 1e-3;
+        residualSlip          1e-3;
+    }
+
+    (solid liquid)
+    {
+        type SchillerNaumann;
+        residualPhaseFraction 1e-6;
+        residualSlip          1e-6;
+    }
+);
+
+
+// Dummy entries required by some models (safe to leave as is)
+transportModel  Newtonian;
+nu              0;
+
+// ************************************************************************* //
+EOF
+  else
+    cat > "$caseDir/constant/transportProperties" <<EOF
+$HEADER
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+
+phases
+(
+    gas
+    {
+        rho             @GAS_RHO@;
+        nu              @GAS_NU@;
+        kappa           0;
+        Cp              0;
+
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           @GAS_DIAMETER@;
+        }
+    }
+
+    liquid
+    {
+        rho             @LIQUID_RHO@;
+        nu              @LIQUID_NU@;
+        kappa           0;
+        Cp              0;
+
+        diameterModel   constant;
+        constantCoeffs
+        {
+            d           @LIQUID_DIAMETER@;
+        }
+    }
+);
+
+
+sigmas
+(
+    (gas liquid) @SIGMA_GAS_LIQUID@;
+);
+
+interfaceCompression
+(
+    // Optional interface compression per pair, leave empty to use fvSchemes/method
+);
+
+virtualMass
+(
+    (gas liquid) @VM_GAS_LIQUID@;
+);
+
+drag
+(
+    (gas liquid)
+    {
+        type blended;
+        gas
+        {
+            type SchillerNaumann;
+            residualPhaseFraction 0;
+            residualSlip 0;
+        }
+        liquid
+        {
+            type SchillerNaumann;
+            residualPhaseFraction 0;
+            residualSlip 0;
+        }
+        residualPhaseFraction 1e-3;
+        residualSlip          1e-3;
+    }
+);
+
+
+// Dummy entries required by some models (safe to leave as is)
+transportModel  Newtonian;
+nu              0;
+
+// ************************************************************************* //
+
+EOF
+  fi
 
   # constant/turbulenceProperties
   cat > "$caseDir/constant/turbulenceProperties" <<EOF
@@ -563,8 +859,9 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-  # alpha.solid
-  cat > "$caseDir/0/alpha.solid" <<EOF
+  if [ "$USE_SOLID" = "1" ]; then
+    # alpha.solid
+    cat > "$caseDir/0/alpha.solid" <<EOF
 $HEADER
 
 FoamFile
@@ -597,6 +894,7 @@ boundaryField
 
 // ************************************************************************* //
 EOF
+  fi
 
   # U.gas
   cat > "$caseDir/0/U.gas" <<EOF
@@ -672,8 +970,9 @@ boundaryField
 // ************************************************************************* //
 EOF
 
-  # U.solid
-  cat > "$caseDir/0/U.solid" <<EOF
+  if [ "$USE_SOLID" = "1" ]; then
+    # U.solid
+    cat > "$caseDir/0/U.solid" <<EOF
 $HEADER
 
 FoamFile
@@ -708,6 +1007,7 @@ boundaryField
 
 // ************************************************************************* //
 EOF
+  fi
 
   # 0/nut (turbulent kinematic viscosity for RAS)
   cat > "$caseDir/0/nut" <<EOF
@@ -895,6 +1195,143 @@ boundaryField
 // ************************************************************************* //
 EOF
 
+  # system/setFieldsDict - CONDITIONAL
+  if [ "$USE_SOLID" = "1" ]; then
+  # Three-phase version with algae
+  cat > "$caseDir/system/setFieldsDict" <<EOF
+$HEADER
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+
+// Default: empty reactor
+defaultFieldValues
+(
+    volScalarFieldValue alpha.gas 0.0
+    volScalarFieldValue alpha.liquid 1.0
+    volScalarFieldValue alpha.solid 0.0
+    volScalarFieldValue p_rgh 0
+);
+
+regions
+(
+    // Main liquid region with biomass (70% of reactor height)
+    boxToCell
+    {
+        box (0 0 0) (@LENGTH@ @WIDTH@ @LIQUID_LEVEL@);
+        fieldValues
+        (
+            volScalarFieldValue alpha.gas @HOLDUP_INITIAL@
+            volScalarFieldValue alpha.liquid @LIQUID_FRAC_MAIN@
+            volScalarFieldValue alpha.solid @INITIAL_ALPHA_SOLID@
+        );
+    }
+
+    // Gas headspace at top
+    boxToCell
+    {
+        box (0 0 @LIQUID_LEVEL@) (@LENGTH@ @WIDTH@ @HEIGHT@);
+        fieldValues
+        (
+            volScalarFieldValue alpha.gas 1.0
+            volScalarFieldValue alpha.liquid 0.0
+            volScalarFieldValue alpha.solid 0.0
+            volScalarFieldValue p_rgh 0
+        );
+    }
+
+    // Optional settled biomass layer (bottom 1cm) - only if settling enabled
+    // Uncomment if modeling settling:
+    // boxToCell
+    // {
+    //     box (0 0 0) (@LENGTH@ @WIDTH@ 0.01);
+    //     fieldValues
+    //     (
+    //         volScalarFieldValue alpha.solid @SETTLED_SOLID@
+    //         volScalarFieldValue alpha.liquid @SETTLED_LIQUID@
+    //     );
+    // }
+
+    // Hydrostatic pressure initialization
+    // Using linear interpolation based on liquid height
+    boxToCell
+    {
+        box (0 0 0) (@LENGTH@ @WIDTH@ @LIQUID_LEVEL@);
+        fieldValues
+        (
+            volScalarFieldValue p_rgh #calc "@LIQUID_RHO@ * mag(@G_Z@) * (@LIQUID_LEVEL@ - pos().z())"
+        );
+    }
+);
+
+// ************************************************************************* //
+EOF
+  else
+    # Two-phase version (no solid)
+    cat > "$caseDir/system/setFieldsDict" <<EOF
+$HEADER
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+
+// Default: empty reactor
+defaultFieldValues
+(
+    volScalarFieldValue alpha.gas 0.0
+    volScalarFieldValue alpha.liquid 1.0
+    volScalarFieldValue p_rgh 0
+);
+
+regions
+(
+    // Main liquid region (70% of reactor height)
+    boxToCell
+    {
+        box (0 0 0) (@LENGTH@ @WIDTH@ @LIQUID_LEVEL@);
+        fieldValues
+        (
+            volScalarFieldValue alpha.gas @HOLDUP_INITIAL@
+            volScalarFieldValue alpha.liquid @LIQUID_FRAC_NOPHASE@
+        );
+    }
+
+    // Gas headspace at top
+    boxToCell
+    {
+        box (0 0 @LIQUID_LEVEL@) (@LENGTH@ @WIDTH@ @HEIGHT@);
+        fieldValues
+        (
+            volScalarFieldValue alpha.gas 1.0
+            volScalarFieldValue alpha.liquid 0.0
+            volScalarFieldValue p_rgh 0
+        );
+    }
+
+    // Hydrostatic pressure initialization
+    boxToCell
+    {
+        box (0 0 0) (@LENGTH@ @WIDTH@ @LIQUID_LEVEL@);
+        fieldValues
+        (
+            volScalarFieldValue p_rgh #calc "@LIQUID_RHO@ * mag(@G_Z@) * (@LIQUID_LEVEL@ - pos().z())"
+        );
+    }
+);
+
+// ************************************************************************* //
+EOF
+  fi
+
   # Allrun
   cat > "$caseDir/Allrun" <<'EOF'
 #!/usr/bin/env bash
@@ -907,11 +1344,19 @@ if [ -z "$WM_PROJECT_DIR" ]; then
   exit 1
 fi
 
-blockMesh || { echo "blockMesh failed"; exit 1; }
+# Check if mesh exists
+if [ ! -d "constant/polyMesh" ]; then
+  echo "Error: No mesh found. Run Allmesh first."
+  exit 1
+fi
 
-# Uncomment if using setFields or additional preprocessing
-# setFields
+# Check if fields are initialized
+if ! grep -q "nonuniform" 0/p_rgh 2>/dev/null; then
+  echo "Warning: Pressure field appears uniform - may not have run setFields"
+  echo "Consider running: setFields"
+fi
 
+echo "[Allrun] multiphaseEulerFoam"
 multiphaseEulerFoam || { echo "Solver failed"; exit 1; }
 EOF
   chmod +x "$caseDir/Allrun"
@@ -1095,6 +1540,9 @@ renumberMesh -overwrite || true
 echo "[Allmesh] checkMesh"
 checkMesh -allTopology -allGeometry || true
 
+echo "[Allmesh] setFields"
+setFields
+
 echo "[Allmesh] Done."
 EOF
   chmod +x "$caseDir/Allmesh"
@@ -1102,121 +1550,6 @@ EOF
 
   # pv.foam
   cat > "$caseDir/pv.foam" <<EOF
-EOF
-
-  # constant/transportProperties
-  cat > "$caseDir/constant/transportProperties" <<EOF
-$HEADER
-
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    object      transportProperties;
-}
-
-phases
-(
-    gas
-    {
-        rho             @GAS_RHO@;
-        nu              @GAS_NU@;
-        kappa           0;
-        Cp              0;
-
-        diameterModel   constant;
-        constantCoeffs
-        {
-            d           @GAS_DIAMETER@;
-        }
-    }
-
-    liquid
-    {
-        rho             @LIQUID_RHO@;
-        nu              @LIQUID_NU@;
-        kappa           0;
-        Cp              0;
-
-        diameterModel   constant;
-        constantCoeffs
-        {
-            d           @LIQUID_DIAMETER@;
-        }
-    }
-
-    solid
-    {
-        rho             @SOLID_RHO@;
-        nu              @SOLID_NU@;
-        kappa           0;
-        Cp              0;
-
-        diameterModel   constant;
-        constantCoeffs
-        {
-            d           @SOLID_DIAMETER@;
-        }
-    }
-);
-
-
-sigmas
-(
-    // (gas liquid) 0.072;
-    // (gas solid)  0;
-    // (liquid solid) 0;
-);
-
-interfaceCompression
-(
-    // Optional interface compression per pair, leave empty to use fvSchemes/method
-);
-
-virtualMass
-(
-    (gas liquid) 0.5
-    // (gas solid)  0.0
-    // (liquid solid) 0.0
-);
-
-drag
-(
-    (gas liquid)
-    {
-        type blended;
-        gas
-        {
-            type SchillerNaumann;
-            residualPhaseFraction 0;
-            residualSlip 0;
-        }
-        liquid
-        {
-            type SchillerNaumann;
-            residualPhaseFraction 0;
-            residualSlip 0;
-        }
-        residualPhaseFraction 1e-3;
-        residualSlip          1e-3;
-    }
-
-    (solid liquid)
-    {
-        type SchillerNaumann;   // simple, robust default; swap if you prefer Gibilaro/WenYu
-        residualPhaseFraction 1e-6;
-        residualSlip          1e-6;
-    }
-);
-
-
-// Dummy entries required by some models (safe to leave as is)
-transportModel  Newtonian;
-nu              0;
-
-// ************************************************************************* //
-
 EOF
 }
 

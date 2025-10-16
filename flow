@@ -56,6 +56,27 @@ read_flowfile(){
   done
 }
 
+# Read only specific keys for case creation
+read_config_key(){
+  local key="$1" default="${2:-}"
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    line="${line%%#*}"
+    [[ "$line" != *=* ]] && continue
+    k="${line%%=*}"; v="${line#*=}"
+    k="${k// /}"
+    [ "$k" = "$key" ] && { echo "${v// /}"; return 0; }
+  done < "$CONFIG"
+
+  for override in "${OVERRIDES[@]}"; do
+    [[ "$override" != *=* ]] && continue
+    k="${override%%=*}"; k="${k// /}"
+    [ "$k" = "$key" ] && { echo "${override#*=}"; return 0; }
+  done
+
+  echo "$default"
+}
+
 apply_substitutions(){
   local dir="$1" processed=0
   while IFS= read -r -d '' file; do
@@ -95,10 +116,16 @@ require_all_placeholders_defined(){
 stage_new(){
   [ -e "$CASE_DIR" ] && die "Case '$CASE_DIR' already exists."
   info "Creating case '$CASE_DIR'..."
+
+  # Read config flags for conditional creation
+  USE_SOLID=$(read_config_key "USESOLID" "1")
+  export USE_SOLID
+
   . "$TEMPLATE"
   type create_case >/dev/null 2>&1 || die "create_case not defined in case.template"
   create_case "$CASE_DIR"
   info "Case created."
+  unset USE_SOLID # remove environment variable
 }
 
 stage_pre(){

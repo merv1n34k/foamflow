@@ -1,4 +1,9 @@
 # ============================
+# Global settings
+# ============================
+USE_SOLID=1
+
+# ============================
 # Geometry & base mesh
 # ============================
 LENGTH=0.20         # m (X)
@@ -36,9 +41,15 @@ GAS_DIAMETER=5e-3
 LIQUID_DIAMETER=1e-3
 SOLID_DIAMETER=2e-6
 
+# surface tension
 SIGMA_GAS_LIQUID=0.072
 SIGMA_GAS_SOLID=0.000
 SIGMA_LIQUID_SOLID=0.000
+
+# virtual mass
+VM_GAS_LIQUID=0.5
+VM_GAS_SOLID=0
+VM_LIQUID_SOLID=0
 
 GAS_MU=1.8e-5
 LIQUID_MU=8.0e-4
@@ -48,13 +59,28 @@ LIQUID_RHO=998.2
 SOLID_RHO=1050
 
 INITIAL_ALPHA_GAS=0.000
-INITIAL_ALPHA_LIQUID=0.95
-INITIAL_ALPHA_SOLID=0.05
+INITIAL_ALPHA_LIQUID=0.995
+INITIAL_ALPHA_SOLID=0.005
 
 GAS_INLET_VEL=(0 0 0.25)
 
 K_INIT=1e-6
 OMEGA_INIT=10.0
+
+LIQUID_LEVEL=0.21          # 70% of 0.30m HEIGHT
+
+# Initial gas holdup in liquid region (typical 1-5%)
+HOLDUP_INITIAL=0.02        # 2% gas holdup
+
+# Liquid fractions (calculated based on other phases)
+# For 3-phase: liquid = 1 - gas - solid
+# For 2-phase: liquid = 1 - gas
+LIQUID_FRAC_MAIN=0.96      # 3-phase: 1 - 0.02(gas) - 0.02(solid)
+LIQUID_FRAC_NOPHASE=0.98   # 2-phase: 1 - 0.02(gas)
+
+# Optional settled layer (if modeling settling)
+SETTLED_SOLID=0.10         # 10% solids in settled layer
+SETTLED_LIQUID=0.90
 
 # ============================
 # Time / solver
