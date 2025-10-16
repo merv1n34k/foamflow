@@ -1,13 +1,17 @@
 # Foamflow
 
-Foamflow is a simple pipeline manager to populate and orchestrate openfoam case
-files. For it to work you only need to define case temple - `case.template`,
-actual pipeline - `do_*` in `flow` script and `Flowfile` for configurable
-values.
+Foamflow is a pipeline manager to populate and orchestrate openfoam case
+files. It requires you to define case template (with all the files you need for the case) - `case.template`,
+and configurable values in `Flowfile`, the `flow` pipeline will do the rest.
 
-Using this pipeline, you can easily create a new case directory from a template, substitute configurable parameters, run the simulation, and extract results in CSV format.
+Using this pipeline, you can easily create multiple case directories from a template, substitute configurable parameters, run the simulation, and extract results in CSV format (depends how you define post processing stage).
 
 Useful for generating single experiment with variable cases.
+
+> [!important]
+> This pipeline assumes you are comfortable with OpenFOAM and bash scripting
+> Using this pipeline manager out-of-the box is NOT recommended
+> Case template is created specifically for my needs, adapt it as you need
 
 # Flow subcommands
 
@@ -23,16 +27,19 @@ flow <case> (no subcommand): Convenience option to run all of the above steps in
 
 ## How to use
 
-If you have `nix` one can simply do:
 
 ```bash
 git clone https://github.com/merv1n34k/foamflow.git
 cd foamflow
-nix develop
+./flow [-D KEY=VALUE] [new|pre|run|post] <case.name>
 ```
 
-In other cases, Openfoam must be installed on your system, for best experience
+# Requirements
+
+1. Openfoam must be installed on your system, for best experience
 follow Openfoam [installation guide](https://openfoam.org/download/).
+
+2. OpenSCAD, if you plan to generate mesh procedurally
 
 ## License
 
