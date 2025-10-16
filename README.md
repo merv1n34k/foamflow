@@ -9,11 +9,11 @@ Using this pipeline, you can easily create multiple case directories from a temp
 Useful for generating single experiment with variable cases.
 
 > [!important]
-> This pipeline assumes you are comfortable with OpenFOAM and bash scripting
-> Using this pipeline manager out-of-the box is NOT recommended
-> Case template is created specifically for my needs, adapt it as you need
+> This pipeline assumes you are comfortable with `OpenFOAM` and `bash` scripting.
+> Using this pipeline manager out-of-the box is **NOT** recommended!
+> Case template is created *specifically* for my needs, adapt it as you need.
 
-# Flow subcommands
+## Flow subcommands
 
 flow new <case>: Create a new case directory structure and populate all necessary OpenFOAM dictionary files from case.template (with placeholder variables in place).
 
@@ -34,7 +34,7 @@ cd foamflow
 ./flow [-D KEY=VALUE] [new|pre|run|post] <case.name>
 ```
 
-# Requirements
+## Requirements
 
 1. Openfoam must be installed on your system, for best experience
 follow Openfoam [installation guide](https://openfoam.org/download/).
