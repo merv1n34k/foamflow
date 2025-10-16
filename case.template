@@ -1382,7 +1382,7 @@ if [ "$NCORES" -gt 1 ]; then
 
   # Reconstruct results
   echo "Reconstructing results..."
-  reconstructPar -latestTime || echo "Warning: reconstruct failed"
+  reconstructPar || echo "Warning: reconstruct failed"
 else
   echo "Running serial..."
   @SOLVER@ || { echo "Solver failed"; exit 1; }
