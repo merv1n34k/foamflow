@@ -58,6 +58,7 @@ runTimeModifiable yes;
 adjustTimeStep  no;
 maxCo           0.5;
 maxAlphaCo      0.5;
+maxDeltaT       0.01;
 
 // ************************************************************************* //
 EOF
@@ -1393,6 +1394,66 @@ EOF
   # --- ensure triSurface folder exists ---
   mkdir -p "$caseDir/constant/triSurface"
 
+  # system/topoSetDict
+  cat > "$caseDir/system/topoSetDict" <<EOF
+$HEADER
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+
+actions
+(
+    // Define sparger holes at configured positions
+    {
+        name    sparger1;
+        type    faceSet;
+        action  new;
+        source  cylinderToFace;
+        p1      (@SPARGER_X1@ @SPARGER_Y@ -0.001);
+        p2      (@SPARGER_X1@ @SPARGER_Y@ 0.001);
+        radius  @SPARGER_RADIUS@;
+    }
+    {
+        name    sparger2;
+        type    faceSet;
+        action  new;
+        source  cylinderToFace;
+        p1      (@SPARGER_X2@ @SPARGER_Y@ -0.001);
+        p2      (@SPARGER_X2@ @SPARGER_Y@ 0.001);
+        radius  @SPARGER_RADIUS@;
+    }
+    {
+        name    sparger3;
+        type    faceSet;
+        action  new;
+        source  cylinderToFace;
+        p1      (@SPARGER_X3@ @SPARGER_Y@ -0.001);
+        p2      (@SPARGER_X3@ @SPARGER_Y@ 0.001);
+        radius  @SPARGER_RADIUS@;
+    }
+    {
+        name    sparger4;
+        type    faceSet;
+        action  new;
+        source  cylinderToFace;
+        p1      (@SPARGER_X4@ @SPARGER_Y@ -0.001);
+        p2      (@SPARGER_X4@ @SPARGER_Y@ 0.001);
+        radius  @SPARGER_RADIUS@;
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  new;
+        source  setToFace;
+        sets    (sparger1 sparger2 sparger3 sparger4);
+    }
+);
+EOF
+
   # system/snappyHexMeshDict
   cat > "$caseDir/system/snappyHexMeshDict" <<EOF
 $HEADER
@@ -1458,12 +1519,11 @@ castellatedMeshControls
 
     refinementRegions
     {
-        inletBox
-        {
-            mode inside;
-            // very large distance selects the whole box
-            levels ((1e15 @INLET_BOX_LEVEL@));
-        }
+        // Sparger refinement regions using configured positions
+        sparger1 { type sphere; centre (@SPARGER_X1@ @SPARGER_Y@ @SPARGER_REFINE_Z@); radius @SPARGER_REFINE_RADIUS@; levels ((1e15 @SPARGER_REFINE_LEVEL@)); }
+        sparger2 { type sphere; centre (@SPARGER_X2@ @SPARGER_Y@ @SPARGER_REFINE_Z@); radius @SPARGER_REFINE_RADIUS@; levels ((1e15 @SPARGER_REFINE_LEVEL@)); }
+        sparger3 { type sphere; centre (@SPARGER_X3@ @SPARGER_Y@ @SPARGER_REFINE_Z@); radius @SPARGER_REFINE_RADIUS@; levels ((1e15 @SPARGER_REFINE_LEVEL@)); }
+        sparger4 { type sphere; centre (@SPARGER_X4@ @SPARGER_Y@ @SPARGER_REFINE_Z@); radius @SPARGER_REFINE_RADIUS@; levels ((1e15 @SPARGER_REFINE_LEVEL@)); }
     }
 
     resolveFeatureAngle     @RESOLVE_FEATURE_ANGLE@;

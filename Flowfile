@@ -17,7 +17,24 @@ NZ=60
 # baffles
 NB=0
 BAFFLE_RADIUS=0.01
+
+# SCAD model
 PBR_SCAD=../pbr.scad
+
+# sparger configuration
+N_SPARGERS=4
+SPARGER_D=0.0037
+SPARGER_RADIUS=0.00222
+# Sparger positions (normalized by LENGTH for X, WIDTH for Y)
+SPARGER_X1=0.04
+SPARGER_X2=0.08
+SPARGER_X3=0.12
+SPARGER_X4=0.16
+SPARGER_Y=0.05
+# Mesh refinement around spargers
+SPARGER_REFINE_Z=0.005
+SPARGER_REFINE_RADIUS=0.005
+SPARGER_REFINE_LEVEL=4
 
 # gravity
 G_X=0
