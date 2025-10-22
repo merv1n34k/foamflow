@@ -87,7 +87,7 @@ BOTTOM_LAYER=0.075
 MIDDLE_LAYER=0.18
 
 # boundary conditions
-GAS_INLET_VEL=(0 0 0.25)
+GAS_INLET_VEL=(0 0 0.1)
 
 # turbulence
 K_INIT=1e-6
@@ -100,7 +100,7 @@ NUT_INIT=1e-6
 SOLVER=multiphaseEulerFoam
 START_TIME=0
 END_TIME=10
-DELTA_T=2e-3
+DELTA_T=1e-4
 WRITE_INTERVAL=0.05
 
 # ============================

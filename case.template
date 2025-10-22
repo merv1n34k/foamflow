@@ -55,7 +55,7 @@ writeCompression off;
 
 timePrecision   6;
 runTimeModifiable yes;
-adjustTimeStep  no;
+adjustTimeStep  yes;
 maxCo           0.5;
 maxAlphaCo      0.5;
 maxDeltaT       0.01;
@@ -90,8 +90,8 @@ divSchemes
 {
     default         none;
 
-    "div\(phi,alpha.*\)"    Gauss vanLeer;
-    "div\(phir,alpha.*,alpha.*\)"   Gauss vanLeer;
+    "div\(phi,alpha.*\)"    Gauss upwind;
+    "div\(phir,alpha.*,alpha.*\)"   Gauss upwind;
 
     "div\(alphaPhi.*,U.*\)" Gauss limitedLinearV 1;
     div(Rc)                 Gauss linear;
@@ -156,8 +156,8 @@ solvers
 {
     "alpha.*"
     {
-        nAlphaCorr      2;
-        nAlphaSubCycles 1;
+        nAlphaCorr      3;
+        nAlphaSubCycles 2;
         cAlpha          1;
 
         solver          smoothSolver;
