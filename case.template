@@ -1623,6 +1623,12 @@ if [ "$NB" -gt 0 ]; then
   snappyHexMesh -overwrite
 fi
 
+echo "[Allmesh] topoSet"
+topoSet
+
+echo "[Allmesh] createPatch -overwrite"
+createPatch -overwrite
+
 echo "[Allmesh] renumberMesh -overwrite"
 renumberMesh -overwrite || true
 
