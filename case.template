@@ -297,16 +297,13 @@ edges
 
 patches
 (
-    patch inlet
-    (
-        (0 3 2 1)          // bottom face
-    )
     patch outlet
     (
         (4 5 6 7)          // top face
     )
     wall walls
     (
+        (0 3 2 1)  // bottom face
         (0 4 7 3)  // left face
         (1 2 6 5)  // right face
         (0 1 5 4)  // front face
@@ -622,7 +619,9 @@ sigmas
 
 interfaceCompression
 (
-    // Optional interface compression per pair, leave empty to use fvSchemes/method
+    (gas liquid) @CALPHA_GAS_LIQUID@
+    (gas solid)  @CALPHA_GAS_SOLID@
+    (liquid solid) @CALPHA_LIQUID_SOLID@
 );
 
 virtualMass
@@ -719,7 +718,7 @@ sigmas
 
 interfaceCompression
 (
-    // Optional interface compression per pair, leave empty to use fvSchemes/method
+    (gas liquid) @CALPHA_GAS_LIQUID@
 );
 
 virtualMass
@@ -808,7 +807,7 @@ internalField   uniform @INITIAL_ALPHA_GAS@;
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            zeroGradient;
     }
@@ -843,7 +842,7 @@ internalField   uniform @INITIAL_ALPHA_LIQUID@;
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            zeroGradient;
     }
@@ -879,7 +878,7 @@ internalField   uniform @INITIAL_ALPHA_SOLID@;
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            zeroGradient;
     }
@@ -915,7 +914,7 @@ internalField   uniform (0 0 0);
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            fixedValue;
         value           uniform @GAS_INLET_VEL@;
@@ -952,7 +951,7 @@ internalField   uniform (0 0 0);
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            fixedValue;
         value           uniform (0 0 0);
@@ -990,7 +989,7 @@ internalField   uniform (0 0 0);
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            fixedValue;
         value           uniform (0 0 0);
@@ -1028,7 +1027,7 @@ internalField   uniform @NUT_INIT@;
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            calculated;
         value           uniform @NUT_INIT@;
@@ -1065,7 +1064,7 @@ internalField   uniform 0;
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            zeroGradient;
     }
@@ -1101,7 +1100,7 @@ internalField   uniform 0;
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            fixedFluxPressure;
         value           uniform 0;
@@ -1140,7 +1139,7 @@ internalField   uniform @K_INIT@;
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            fixedValue;
         value           uniform @K_INIT@;
@@ -1177,7 +1176,7 @@ internalField   uniform @OMEGA_INIT@;
 
 boundaryField
 {
-    inlet
+    spargerInlet
     {
         type            fixedValue;
         value           uniform @OMEGA_INIT@;
@@ -1295,7 +1294,7 @@ defaultFieldValues
 
 regions
 (
-    // Main liquid region (70% of reactor height)
+    // Main liquid region (85% of reactor height)
     boxToCell
     {
         box (0 0 0) (@LENGTH@ @WIDTH@ @LIQUID_LEVEL@);
@@ -1331,7 +1330,7 @@ regions
         );
     }
 
-    // Layer 2: Middle 25-50%
+    // Layer 2: Middle 60%
     boxToCell
     {
         box (0 0 @BOTTOM_LAYER@) (@LENGTH@ @WIDTH@ @MIDDLE_LAYER@);
@@ -1407,51 +1406,253 @@ FoamFile
 
 actions
 (
-    // Define sparger holes at configured positions
-    {
-        name    sparger1;
-        type    faceSet;
-        action  new;
-        source  cylinderToFace;
-        p1      (@SPARGER_X1@ @SPARGER_Y@ -0.001);
-        p2      (@SPARGER_X1@ @SPARGER_Y@ 0.001);
-        radius  @SPARGER_RADIUS@;
-    }
-    {
-        name    sparger2;
-        type    faceSet;
-        action  new;
-        source  cylinderToFace;
-        p1      (@SPARGER_X2@ @SPARGER_Y@ -0.001);
-        p2      (@SPARGER_X2@ @SPARGER_Y@ 0.001);
-        radius  @SPARGER_RADIUS@;
-    }
-    {
-        name    sparger3;
-        type    faceSet;
-        action  new;
-        source  cylinderToFace;
-        p1      (@SPARGER_X3@ @SPARGER_Y@ -0.001);
-        p2      (@SPARGER_X3@ @SPARGER_Y@ 0.001);
-        radius  @SPARGER_RADIUS@;
-    }
-    {
-        name    sparger4;
-        type    faceSet;
-        action  new;
-        source  cylinderToFace;
-        p1      (@SPARGER_X4@ @SPARGER_Y@ -0.001);
-        p2      (@SPARGER_X4@ @SPARGER_Y@ 0.001);
-        radius  @SPARGER_RADIUS@;
-    }
+    // 2x15 grid of 3mm squares, 13mm spacing between centers
+    // Row 1 (Y=0.040)
     {
         name    spargerFaces;
         type    faceSet;
         action  new;
-        source  setToFace;
-        sets    (sparger1 sparger2 sparger3 sparger4);
+        source  boxToFace;
+        box     (0.0085 0.0385 -0.001) (0.0115 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0215 0.0385 -0.001) (0.0245 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0345 0.0385 -0.001) (0.0375 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0475 0.0385 -0.001) (0.0505 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0605 0.0385 -0.001) (0.0635 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0735 0.0385 -0.001) (0.0765 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0865 0.0385 -0.001) (0.0895 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0995 0.0385 -0.001) (0.1025 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1125 0.0385 -0.001) (0.1155 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1255 0.0385 -0.001) (0.1285 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1385 0.0385 -0.001) (0.1415 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1515 0.0385 -0.001) (0.1545 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1645 0.0385 -0.001) (0.1675 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1775 0.0385 -0.001) (0.1805 0.0415 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1905 0.0385 -0.001) (0.1935 0.0415 0.001);
+    }
+
+    // Row 2 (Y=0.060)
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0085 0.0585 -0.001) (0.0115 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0215 0.0585 -0.001) (0.0245 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0345 0.0585 -0.001) (0.0375 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0475 0.0585 -0.001) (0.0505 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0605 0.0585 -0.001) (0.0635 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0735 0.0585 -0.001) (0.0765 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0865 0.0585 -0.001) (0.0895 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.0995 0.0585 -0.001) (0.1025 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1125 0.0585 -0.001) (0.1155 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1255 0.0585 -0.001) (0.1285 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1385 0.0585 -0.001) (0.1415 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1515 0.0585 -0.001) (0.1545 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1645 0.0585 -0.001) (0.1675 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1775 0.0585 -0.001) (0.1805 0.0615 0.001);
+    }
+    {
+        name    spargerFaces;
+        type    faceSet;
+        action  add;
+        source  boxToFace;
+        box     (0.1905 0.0585 -0.001) (0.1935 0.0615 0.001);
     }
 );
+
+// ************************************************************************* //
+EOF
+  # system/createPatchDict
+  cat > "$caseDir/system/createPatchDict" <<EOF
+$HEADER
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      createPatchDict;
+}
+
+pointSync false;
+
+patches
+(
+    {
+        name spargerInlet;
+        patchInfo
+        {
+            type patch;
+        }
+        constructFrom set;
+        set spargerFaces;
+    }
+);
+
+// ************************************************************************* //
 EOF
 
   # system/snappyHexMeshDict
@@ -1519,11 +1720,23 @@ castellatedMeshControls
 
     refinementRegions
     {
-        // Sparger refinement regions using configured positions
-        sparger1 { type sphere; centre (@SPARGER_X1@ @SPARGER_Y@ @SPARGER_REFINE_Z@); radius @SPARGER_REFINE_RADIUS@; levels ((1e15 @SPARGER_REFINE_LEVEL@)); }
-        sparger2 { type sphere; centre (@SPARGER_X2@ @SPARGER_Y@ @SPARGER_REFINE_Z@); radius @SPARGER_REFINE_RADIUS@; levels ((1e15 @SPARGER_REFINE_LEVEL@)); }
-        sparger3 { type sphere; centre (@SPARGER_X3@ @SPARGER_Y@ @SPARGER_REFINE_Z@); radius @SPARGER_REFINE_RADIUS@; levels ((1e15 @SPARGER_REFINE_LEVEL@)); }
-        sparger4 { type sphere; centre (@SPARGER_X4@ @SPARGER_Y@ @SPARGER_REFINE_Z@); radius @SPARGER_REFINE_RADIUS@; levels ((1e15 @SPARGER_REFINE_LEVEL@)); }
+        // Refine entire bottom region for better sparger resolution
+        bottomRefinement
+        {
+            type box;
+            min (0 0 0);
+            max (@LENGTH@ @WIDTH@ 0.02);  // Refine bottom 20mm
+            levels ((1e15 3));
+        }
+
+        // Extra refinement at sparger area
+        spargerRegion
+        {
+            type box;
+            min (0.075 0.035 0);
+            max (0.125 0.065 0.01);  // Just the sparger area
+            levels ((1e15 4));  // Higher refinement level
+        }
     }
 
     resolveFeatureAngle     @RESOLVE_FEATURE_ANGLE@;

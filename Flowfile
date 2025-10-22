@@ -10,31 +10,18 @@ WIDTH=0.10
 HEIGHT=0.30
 
 # mesh
-NX=40
-NY=20
+NX=80
+NY=40
 NZ=60
 
 # baffles
 NB=0
 BAFFLE_RADIUS=0.01
+# sparger
+SPARGER_REFINE_LEVEL=4
 
 # SCAD model
 PBR_SCAD=../pbr.scad
-
-# sparger configuration
-N_SPARGERS=4
-SPARGER_D=0.0037
-SPARGER_RADIUS=0.00222
-# Sparger positions (normalized by LENGTH for X, WIDTH for Y)
-SPARGER_X1=0.04
-SPARGER_X2=0.08
-SPARGER_X3=0.12
-SPARGER_X4=0.16
-SPARGER_Y=0.05
-# Mesh refinement around spargers
-SPARGER_REFINE_Z=0.005
-SPARGER_REFINE_RADIUS=0.005
-SPARGER_REFINE_LEVEL=4
 
 # gravity
 G_X=0
@@ -63,12 +50,18 @@ SOLID_MU=1.0e-3
 SOLID_NU=1.0e-6
 
 # interfaces
+# surface tension
 SIGMA_GAS_LIQUID=0.072
 SIGMA_GAS_SOLID=0.000
 SIGMA_LIQUID_SOLID=0.000
+# virtual mass
 VM_GAS_LIQUID=0.5
 VM_GAS_SOLID=0
 VM_LIQUID_SOLID=0
+# interface compressions
+CALPHA_GAS_LIQUID=1.0
+CALPHA_GAS_SOLID=0.0
+CALPHA_LIQUID_SOLID=0.0
 
 # ============================
 # Initial Conditions
@@ -94,7 +87,7 @@ BOTTOM_LAYER=0.075
 MIDDLE_LAYER=0.18
 
 # boundary conditions
-GAS_INLET_VEL=(0 0 0.5)
+GAS_INLET_VEL=(0 0 0.25)
 
 # turbulence
 K_INIT=1e-6
